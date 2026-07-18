@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>旅行分账</title>
+<style>
+  /* ============================================================
+     设计方向:「克制的高级感」
+     参照的是市面上偏"安静"的高端 App 的通用语法:大留白、
+     发丝分割线代替大量描边卡片、衬线字只用在少数几个地方做点缀、
+     金额用斜体衬线数字(像精品店小票上的价格),不用鲜艳色块、
+     不用阴影堆叠、不用旋转贴纸——用排版和留白本身撑住"高级"。
+     ============================================================ */
+  :root {
+    --bg:#F7F7F4; --surface:#FFFFFF;
+    --ink:#1B1B16; --sub:#8C8A80; --faint:#C9C6B9; --line:#E6E3D9;
+    --accent:#8A6B3E; --accent-ink:#6B5027; --clay:#8C5C4C; --sage:#57614F;
+    --mono: ui-monospace,'SF Mono',Consolas,Menlo,monospace;
+    --serif: Georgia,'Songti SC','STSong','Noto Serif SC',serif;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    font-family:-apple-system,system-ui,'PingFang SC','Microsoft YaHei',sans-serif;
+    background:var(--bg); color:var(--ink); min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  #app { max-width:520px; margin:0 auto; padding:34px 22px 150px; }
+  .num { font-variant-numeric:tabular-nums; }
+  .serif { font-family:var(--serif); }
+
+  h1 { font-family:var(--serif); font-size:27px; font-weight:700; letter-spacing:-.01em; }
+  h2 { font-size:11px; font-weight:700; letter-spacing:.16em; color:var(--sub); text-transform:uppercase; margin:30px 0 14px; }
+  .eb { font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--accent-ink); }
+  .muted { color:var(--sub); font-size:13.5px; line-height:1.75; }
+
+  button { font:inherit; border:none; border-radius:10px; cursor:pointer; padding:13px 20px; font-weight:600; }
+  .cta { background:var(--ink); color:#fff; width:100%; letter-spacing:.02em; }
+  .cta:hover { background:#000; }
+  .outline { background:none; border:1px solid var(--line); color:var(--ink); padding:11px 18px; }
+  .outline:hover { border-color:var(--faint); }
+  .ghost { background:none; color:var(--ink); text-decoration:underline; text-underline-offset:4px;
+    text-decoration-color:var(--faint); padding:6px 0; font-weight:500; font-size:13.5px; }
+  .icon-btn { background:none; color:var(--sub); padding:4px 6px; font-size:13px; font-weight:500; }
+
+  .surface { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:20px; margin-bottom:16px; }
+  input, select { font:inherit; padding:10px 2px; border:none; border-bottom:1px solid var(--line);
+    width:100%; background:transparent; color:var(--ink); border-radius:0; }
+  input:focus, select:focus { outline:none; border-bottom-color:var(--ink); }
+  label { font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--sub);
+    display:block; margin:16px 0 4px; }
+  .row { display:flex; gap:18px; align-items:flex-end; }
+  .row > * { flex:1; }
+  .checks { display:flex; flex-wrap:wrap; gap:8px; }
+  .checks label { display:flex; align-items:center; gap:5px; margin:0; font-size:13px; letter-spacing:0;
+    text-transform:none; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-weight:500; }
+  .checks input { width:auto; accent-color:var(--ink); }
+  .checks input[type=radio] { position:absolute; opacity:0; width:0; }
+  .checks label:has(input[type=radio]:checked) { background:var(--ink); border-color:var(--ink); color:#fff; }
+  .checks label:has(input[type=radio]:focus-visible) { outline:2px solid var(--accent); outline-offset:2px; }
+  .sv { width:56px; padding:2px 4px; border:none; border-bottom:1px solid var(--faint); }
+
+  .topbar { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .trip-date { font-size:12.5px; color:var(--sub); margin-top:5px; }
+  .avatars { display:flex; flex-shrink:0; }
+  .av { width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+    background:#fff; color:var(--ink); font-size:11.5px; font-weight:700; border:1.3px solid var(--ink); }
+  .avatars .av { margin-left:-7px; } .avatars .av:first-child { margin-left:0; }
+  .tag { display:inline-block; color:var(--ink); border:1px solid var(--line); border-radius:999px;
+    padding:5px 13px; margin:0 6px 6px 0; font-size:13px; }
+
+  .status { display:flex; justify-content:space-between; align-items:center; padding:15px 2px;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin:16px 0 6px;
+    font-size:13.5px; cursor:pointer; }
+  .status .arr { color:var(--sub); font-size:12px; }
+
+  .bottombar { position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--line);
+    z-index:15; padding-bottom:env(safe-area-inset-bottom); }
+  .bottombar .bb-in { max-width:520px; margin:0 auto; display:flex; }
+  .bottombar button { flex:1; background:none; border-radius:0; padding:15px 0 17px; font-size:13px;
+    font-weight:600; color:var(--sub); letter-spacing:.06em; }
+  .bottombar button.on { color:var(--ink); box-shadow:inset 0 2px 0 var(--ink); }
+
+  .leader-row { display:flex; align-items:baseline; gap:6px; }
+  .leader-row .lbl { white-space:nowrap; }
+  .leader-row .ld { flex:1; border-bottom:1px dotted var(--faint); margin:0 2px 4px; min-width:12px; }
+  .leader-row .val { white-space:nowrap; font-weight:600; }
+
+  .tl-head { display:flex; justify-content:space-between; align-items:baseline; margin:0 0 4px; }
+  .timeline { position:relative; padding-left:18px; margin-top:14px; }
+  .tl-line { position:absolute; left:4px; top:5px; bottom:14px; width:1px; background:var(--line); }
+  .stop { position:relative; margin-bottom:26px; }
+  .stop-dot { position:absolute; left:-18px; top:5px; width:8px; height:8px; border-radius:50%; background:var(--ink); }
+  .stop-date { font-size:11px; letter-spacing:.1em; color:var(--sub); text-transform:uppercase; }
+  .stop-name { font-family:var(--serif); font-size:18px; font-weight:700; margin-top:2px; }
+  .stop-note { font-size:13px; color:var(--sub); margin:4px 0 12px; font-style:italic; }
+  .exp-lines { margin-top:4px; }
+  .exp-lines .leader-row { font-size:13px; padding:5px 0; }
+  .exp-lines .cat-dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--accent); margin-right:2px; }
+
+  .fab { position:fixed; bottom:84px; left:50%; transform:translateX(-50%);
+    border-radius:999px; padding:14px 24px; font-size:14px; font-weight:600; white-space:nowrap;
+    background:var(--ink); color:#fff; z-index:10; box-shadow:0 16px 34px -12px rgba(0,0,0,.4); }
+  .stop-add { font-size:12px; color:var(--accent-ink); background:none; border:none; padding:6px 0 0;
+    font-weight:600; text-decoration:underline; text-decoration-color:var(--faint); text-underline-offset:3px; }
+
+  .exp-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0;
+    border-bottom:1px solid var(--line); gap:10px; }
+  .exp-row:last-child { border-bottom:none; }
+  .exp-row .who { font-size:12px; color:var(--sub); margin-top:3px; }
+  .amt-r { text-align:right; white-space:nowrap; }
+  .amt-r .main { font-weight:700; }
+  .amt-r .orig { font-size:11.5px; color:var(--sub); }
+  .date-h { font-size:11px; letter-spacing:.14em; color:var(--sub); text-transform:uppercase; margin:22px 0 8px; }
+
+  .s2-title { font-family:var(--serif); font-size:24px; font-weight:700; margin-top:4px; }
+  .s2-sub { font-size:13px; color:var(--sub); margin:8px 0 8px; }
+  .balance-row { padding:13px 0; border-bottom:1px solid var(--line); }
+  .balance-row .val.pos { color:var(--accent-ink); }
+  .balance-row .val.neg { color:var(--clay); }
+
+  .transfer { padding:20px 0; border-bottom:1px solid var(--line); }
+  .transfer .route { display:flex; align-items:baseline; gap:9px; font-size:16px; font-weight:600; }
+  .transfer .route .arrow { color:var(--sub); font-weight:400; font-size:14px; }
+  .transfer .t-amt { margin-left:auto; font-family:var(--serif); font-style:italic; font-weight:700; font-size:19px; }
+  .transfer .t-row { display:flex; align-items:baseline; }
+  .t-detail { margin-top:10px; }
+  .t-detail summary { font-size:12px; color:var(--sub); cursor:pointer; list-style:none; text-decoration:underline;
+    text-decoration-color:var(--faint); text-underline-offset:3px; }
+  .t-detail summary::-webkit-details-marker { display:none; }
+  .detail-line { font-size:12.5px; color:var(--sub); margin-top:8px; line-height:1.9; }
+  .t-actions { margin-top:12px; }
+  .stamp { font-size:11.5px; font-weight:700; color:var(--accent-ink); letter-spacing:.1em; text-transform:uppercase;
+    border-bottom:1.5px solid var(--accent); padding-bottom:2px; }
+
+  .stat { display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13px; }
+  .stat .sl { flex:0 0 78px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); }
+  .stat .bar { flex:1; height:2px; background:var(--line); }
+  .stat .bar i { display:block; height:100%; background:var(--ink); min-width:2px; }
+  .stat .sv2 { flex:0 0 auto; font-size:12.5px; font-weight:600; white-space:nowrap; }
+  details.section { margin-bottom:4px; }
+  details.section > summary { font-size:13px; font-weight:600; cursor:pointer; list-style:none; padding:11px 0;
+    border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
+  details.section > summary::-webkit-details-marker { display:none; }
+  details.section > summary::after { content:'＋'; color:var(--sub); font-weight:300; }
+  details.section[open] > summary::after { content:'－'; }
+  details.section > div { padding:12px 0 6px; }
+
+  .overlay { position:fixed; inset:0; background:rgba(20,19,15,.82); z-index:20; overflow-y:auto;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:16px; }
+  .overlay canvas { display:none; }
+  .recap-card { width:min(320px,92vw); background:linear-gradient(165deg,#232019,#171512);
+    border-radius:6px; overflow:hidden; padding:28px 26px 24px; color:#F3EFE4;
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.9); }
+  .recap-title { font-family:var(--serif); font-style:italic; font-size:23px; font-weight:700; color:#fff; }
+  .recap-sub { font-size:11.5px; letter-spacing:.14em; color:#B8A98A; margin-top:6px; text-transform:uppercase; }
+  .recap-rule { height:1px; background:var(--accent); margin:20px 0; opacity:.6; }
+  .recap-stats { display:flex; justify-content:space-between; }
+  .stat-box { text-align:center; }
+  .stat-num { font-family:var(--serif); font-size:24px; font-weight:700; }
+  .stat-lb { font-size:10px; color:#B8A98A; margin-top:3px; letter-spacing:.1em; text-transform:uppercase; }
+  .recap-total { text-align:center; font-size:12px; color:#B8A98A; margin-top:20px; letter-spacing:.08em; text-transform:uppercase; }
+  .recap-total b { font-family:var(--serif); font-style:italic; color:#fff; font-size:19px; display:block; margin-top:4px; letter-spacing:0; text-transform:none; }
+  .recap-facts { margin-top:20px; display:flex; flex-direction:column; gap:12px; }
+  .recap-fact { font-size:12px; color:#E3DCC8; padding-left:12px; border-left:1.5px solid var(--accent); line-height:1.6; }
+  .recap-stamp { margin-top:20px; text-align:right; font-size:10.5px; letter-spacing:.16em; color:var(--accent);
+    text-transform:uppercase; border-top:1px solid rgba(255,255,255,.15); padding-top:12px; }
+
+  .hero { padding:2px 0 26px; }
+  .hero h1 { margin-top:8px; }
+  .hero p { margin-top:8px; }
+  .trip-row { padding:18px 0; border-bottom:1px solid var(--line); cursor:pointer; }
+  .trip-row .t-name { font-family:var(--serif); font-size:18px; font-weight:700; }
+  .trip-row .t-meta { font-size:12px; color:var(--sub); margin-top:4px; }
+  .trip-row .t-total { font-weight:600; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+'use strict';
+const LS = 'travel-split-v1';
+let db = JSON.parse(localStorage.getItem(LS) || '{"trips":[]}');
+function migratePayers(db) {
+  db.trips.forEach(t => t.expenses.forEach(e => {
+    if (!e.payers && e.payerId) { e.payers = { [e.payerId]: e.mainCents }; delete e.payerId; }
+  }));
+}
+migratePayers(db);
+let view = { screen:'list', tripId:null, tab:'timeline', showForm:false, presetStopId:'', showStopForm:false, showRecap:false, showNewTrip:false };
+const save = () => localStorage.setItem(LS, JSON.stringify(db));
+const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const esc  = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const trip = () => db.trips.find(t => t.id === view.tripId);
+const fmt  = c => (c/100).toFixed(2);
+const mname = (t,id) => (t.members.find(m => m.id === id) || {name:'?'}).name;
+const CATS = ['餐饮','住宿','交通','门票','购物','其他'];
+const CURS = ['MYR','JPY','USD','CNY','SGD'];
+
+function mainPayer(e, memberSet) {
+  let best = null;
+  for (const [id, c] of Object.entries(e.payers))
+    if (id in memberSet && (best === null || c > e.payers[best])) best = id;
+  return best;
+}
+function expenseShares(e, memberSet) {
+  const ids = e.participantIds.filter(id => id in memberSet);
+  const payer = mainPayer(e, memberSet);
+  if (!ids.length || payer === null) return null;
+  const sp = e.split || { type: 'equal' };
+  const shares = {};
+  if (sp.type === 'amount') {
+    ids.forEach(id => shares[id] = Math.round((sp.values[id] || 0) * e.rate * 100));
+  } else {
+    const w = id => sp.type === 'shares' ? (sp.values[id] || 0) : 1;
+    const W = ids.reduce((s, id) => s + w(id), 0) || 1;
+    ids.forEach(id => shares[id] = Math.floor(e.mainCents * w(id) / W));
+  }
+  const rem = e.mainCents - Object.values(shares).reduce((s, x) => s + x, 0);
+  shares[payer] = (shares[payer] || 0) + rem;
+  return shares;
+}
+function computeBalances(t) {
+  const bal = {};
+  t.members.forEach(m => bal[m.id] = 0);
+  for (const e of t.expenses) {
+    const shares = expenseShares(e, bal);
+    if (!shares) continue;
+    for (const [id, c] of Object.entries(e.payers)) if (id in bal) bal[id] += c;
+    for (const [id, c] of Object.entries(shares)) bal[id] -= c;
+  }
+  for (const s of (t.settlements || [])) { bal[s.from] += s.cents; bal[s.to] -= s.cents; }
+  return bal;
+}
+function settleUp(bal) {
+  const arr = Object.entries(bal).map(([id, c]) => ({id, c}));
+  const out = [];
+  while (true) {
+    arr.sort((a, b) => b.c - a.c);
+    const cred = arr[0], debt = arr[arr.length - 1];
+    if (!cred || cred.c <= 0 || debt.c >= 0) break;
+    const amt = Math.min(cred.c, -debt.c);
+    out.push({ from: debt.id, to: cred.id, cents: amt });
+    cred.c -= amt; debt.c += amt;
+  }
+  return out;
+}
+function transferDetail(t, from, to) {
+  const set = {}; t.members.forEach(m => set[m.id] = 0);
+  const lines = []; let sum = 0;
+  for (const e of t.expenses) {
+    if (!(to in e.payers)) continue;
+    const sh = expenseShares(e, set);
+    if (!sh || !sh[from] || from in e.payers) continue;
+    const part = Math.round(sh[from] * e.payers[to] / e.mainCents);
+    if (!part) continue;
+    lines.push({ desc:e.desc, cents:part });
+    sum += part;
+  }
+  return { lines, sum };
+}
+(function selfTest() {
+  const t = { members:[{id:'A'},{id:'B'},{id:'C'}], settlements:[], expenses:[
+    { payers:{A: 90000}, participantIds:['A','C'],     mainCents: 90000, desc:'晚餐' },
+    { payers:{C:120000}, participantIds:['A','B','C'], mainCents:120000, desc:'民宿' },
+    { payers:{B: 27900}, participantIds:['A','B','C'], mainCents: 27900, desc:'车票' }]};
+  const b = computeBalances(t);
+  console.assert(b.A === -4300 && b.B === -21400 && b.C === 25700, '余额算错', b);
+  console.assert(Object.values(b).reduce((s,x) => s+x, 0) === 0, '余额之和≠0', b);
+  const tr = settleUp(b);
+  console.assert(tr.length === 2 && tr.every(x => x.to === 'C'), '结算建议算错', tr);
+  const d = transferDetail(t, 'B', 'C');
+  console.assert(d.lines.length === 1 && d.sum === 40000, '转账明细算错', d);
+  const local = [{id:'x', members:[], expenses:[], v:1}];
+  const r = mergeTrips(local, [{id:'x', members:[], expenses:[], v:2}, {id:'y', members:[], expenses:[]}, {bad:true}]);
+  console.assert(r.added === 1 && r.replaced === 1 && local.length === 2 && local.find(t2 => t2.id === 'x').v === 2, '导入合并算错', local);
+
+  // 任务1:无关联记录的成员可删除;有关联的不可删
+  const tm1 = { members:[{id:'A'},{id:'B'}], expenses:[], settlements:[] };
+  console.assert(delMemberSafe(tm1, 'B') === true && tm1.members.length === 1, '空成员应可删除', tm1);
+  const tm2 = { members:[{id:'A'},{id:'B'}], expenses:[{payerId:'A', participantIds:['A','B']}], settlements:[] };
+  console.assert(delMemberSafe(tm2, 'B') === false && tm2.members.length === 2, '有关联记录不应删除', tm2);
+
+  // 付款人不在参与人里:A 垫 100.00,B、C 分摊
+  const b1 = computeBalances({ members:[{id:'A'},{id:'B'},{id:'C'}], settlements:[], expenses:[
+    { payers:{A:10000}, participantIds:['B','C'], mainCents:10000 }]});
+  console.assert(b1.A === 10000 && b1.B === -5000 && b1.C === -5000, '付款人不参与算错', b1);
+  // 按份数有余数:100.00 按 2:1 分,余 1 分由付款人 A 吸收(A 摊 66.67)
+  const b2 = computeBalances({ members:[{id:'A'},{id:'B'}], settlements:[], expenses:[
+    { payers:{A:10000}, participantIds:['A','B'], mainCents:10000, split:{type:'shares', values:{A:2,B:1}} }]});
+  console.assert(b2.A === 3333 && b2.B === -3333 && b2.A + b2.B === 0, '按份数余数算错', b2);
+  // 外币按金额:各 50 JPY × 汇率 0.0333,各自四舍五入到 167 分,合计比总额多 1 分,差额由付款人吸收
+  const b3 = computeBalances({ members:[{id:'A'},{id:'B'}], settlements:[], expenses:[
+    { payers:{A:333}, participantIds:['A','B'], mainCents:333, rate:0.0333, split:{type:'amount', values:{A:50,B:50}} }]});
+  console.assert(b3.A === 167 && b3.B === -167 && b3.A + b3.B === 0, '外币按金额四舍五入算错', b3);
+  // 标记已还后余额归零、不再出结算建议
+  const b4 = computeBalances({ members:[{id:'A'},{id:'B'}], settlements:[{from:'B',to:'A',cents:5000}], expenses:[
+    { payers:{A:10000}, participantIds:['A','B'], mainCents:10000 }]});
+  console.assert(b4.A === 0 && b4.B === 0 && !settleUp(b4).length, '标记已还后未归零', b4);
+  // 任务2:多人合付 房费 1000.00,A 付 600 B 付 400,三人平分(余 1 分由出资最多的 A 吸收)
+  const b6 = computeBalances({ members:[{id:'A'},{id:'B'},{id:'C'}], settlements:[], expenses:[
+    { payers:{A:60000,B:40000}, participantIds:['A','B','C'], mainCents:100000 }]});
+  console.assert(b6.A === 26666 && b6.B === 6667 && b6.C === -33333, '多人合付余额算错', b6);
+  console.assert(b6.A + b6.B + b6.C === 0, '多人合付余额和应为0', b6);
+  // 任务2:旧数据迁移 payerId → payers
+  const mdb = { trips:[{ expenses:[{ payerId:'A', mainCents:100 }] }] };
+  migratePayers(mdb);
+  console.assert(mdb.trips[0].expenses[0].payers.A === 100 && !('payerId' in mdb.trips[0].expenses[0]), '旧数据迁移算错', mdb);
+  // 删除地点:支出保留,只解除挂载
+  const t5 = { stops:[{id:'s1'},{id:'s2'}], expenses:[{id:'e1', stopId:'s1'},{id:'e2', stopId:'s2'}] };
+  detachStop(t5, 's1');
+  console.assert(t5.stops.length === 1 && t5.expenses.length === 2 && t5.expenses[0].stopId === null
+    && t5.expenses[1].stopId === 's2', '删地点后支出丢了', t5);
+})();
+
+function exportData() {
+  db.lastExportAt = Date.now(); save();
+  const a = document.createElement('a');
+  a.download = `旅行分账-备份-${new Date().toISOString().slice(0,10)}.json`;
+  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(db, null, 2));
+  a.click();
+}
+function mergeTrips(trips, incoming) {
+  let added = 0, replaced = 0;
+  for (const nt of incoming) {
+    if (!nt || !nt.id || !Array.isArray(nt.members) || !Array.isArray(nt.expenses)) continue;
+    const i = trips.findIndex(t => t.id === nt.id);
+    if (i >= 0) { trips[i] = nt; replaced++; } else { trips.unshift(nt); added++; }
+  }
+  return { added, replaced };
+}
+function importData(ev) {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  file.text().then(txt => {
+    let data;
+    try { data = JSON.parse(txt); } catch { alert('不是有效的 JSON 文件'); return; }
+    if (!Array.isArray(data.trips)) { alert('文件里没有行程数据'); return; }
+    const dup = data.trips.filter(nt => nt && db.trips.some(t => t.id === nt.id)).length;
+    if (dup && !confirm(`有 ${dup} 个行程本机已存在，导入会用文件里的版本覆盖它们。继续？`)) return;
+    const r = mergeTrips(db.trips, data.trips);
+    migratePayers(db);
+    save(); render();
+    alert(`导入完成：新增 ${r.added} 个行程${r.replaced ? `，覆盖 ${r.replaced} 个` : ''}。`);
+  });
+}
+function addTrip(ev) {
+  ev.preventDefault();
+  const f = ev.target, name = f.name.value.trim(), cur = f.cur.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!name || !cur) return;
+  const t = { id: uid(), name, currency: cur, members: [], expenses: [], settlements: [], stops: [] };
+  db.trips.unshift(t); save();
+  view = { screen:'trip', tripId: t.id, tab:'timeline', showForm:false };
+  render();
+}
+function delTrip(id) {
+  const t = db.trips.find(t => t.id === id);
+  if (!confirm(`删除行程「${t.name}」？账目会一起删除，不可恢复。`)) return;
+  db.trips = db.trips.filter(t => t.id !== id); save(); render();
+}
+function openTrip(id) { view = { screen:'trip', tripId:id, tab:'timeline', showForm:false }; render(); }
+function setTab(tab)  { view.tab = tab; view.showForm = false; view.editId = ''; render(); }
+function scrollToId(id) { requestAnimationFrame(() => requestAnimationFrame(() =>
+  document.getElementById(id)?.scrollIntoView({ behavior:'smooth', block:'start' }))); }
+function toggleForm() {
+  view.showForm = !view.showForm; view.presetStopId = ''; view.editId = '';
+  render(); if (view.showForm) scrollToId('expense-form');
+}
+function openExpenseForm(stopId) {
+  view.showForm = true; view.presetStopId = stopId || ''; view.editId = '';
+  render(); scrollToId('expense-form');
+}
+function openEditExpense(id) {
+  view.showForm = true; view.editId = id; view.presetStopId = '';
+  render(); scrollToId('expense-form');
+}
+function toggleStopForm() {
+  view.showStopForm = !view.showStopForm; render();
+  if (view.showStopForm) scrollToId('stop-form');
+}
+function toggleNewTrip() { view.showNewTrip = !view.showNewTrip; render(); }
+function openRecap()  { view.showRecap = true; render(); }
+function closeRecap() { view.showRecap = false; render(); }
+function addMember(ev) {
+  ev.preventDefault();
+  const inp = ev.target.mname, name = inp.value.trim();
+  if (!name) return;
+  if (trip().members.some(m => m.name === name)) { alert('已有同名成员'); return; }
+  trip().members.push({ id: uid(), name }); save(); render();
+}
+function addExpense(ev) {
+  ev.preventDefault();
+  const t = trip(), f = ev.target;
+  const amount = parseFloat(f.amount.value);
+  const cur = f.cur.value.toUpperCase().replace(/[^A-Z0-9]/g, '') || t.currency;
+  const rate = cur === t.currency ? 1 : parseFloat(f.rate.value);
+  const participantIds = [...f.querySelectorAll('input[name=pt]:checked')].map(x => x.value);
+  const payerIds = [...f.querySelectorAll('input[name=py]:checked')].map(x => x.value);
+  if (!(amount > 0)) { alert('金额要大于 0'); return; }
+  if (!(rate > 0))   { alert('汇率要大于 0'); return; }
+  if (!participantIds.length) { alert('至少选一个参与人'); return; }
+  if (!payerIds.length) { alert('至少选一个付款人'); return; }
+  const mainCents = Math.round(amount * rate * 100);
+  let payers;
+  if (payerIds.length === 1) payers = { [payerIds[0]]: mainCents };
+  else {
+    payers = {}; let psum = 0;
+    for (const id of payerIds) { const v = parseFloat(f['pv-' + id].value) || 0; payers[id] = Math.round(v * rate * 100); psum += v; }
+    if (Math.round(psum * 100) !== Math.round(amount * 100)) { alert(`各付款人金额合计 ${psum} 不等于总额 ${amount}`); return; }
+    const top = payerIds.reduce((a, b) => payers[b] > payers[a] ? b : a);
+    payers[top] += mainCents - Object.values(payers).reduce((s, x) => s + x, 0);
+  }
+  const split = { type: f.split.value };
+  if (split.type !== 'equal') {
+    split.values = {}; let sum = 0;
+    for (const id of participantIds) { const v = parseFloat(f['sv-' + id].value) || 0; split.values[id] = v; sum += v; }
+    if (split.type === 'shares' && !(sum > 0)) { alert('份数至少要有一个大于 0'); return; }
+    if (split.type === 'amount' && Math.round(sum * 100) !== Math.round(amount * 100)) {
+      alert(`各人金额合计 ${sum} 不等于总额 ${amount}`); return; }
+  }
+  const rec = { id: view.editId || uid(), desc: f.desc.value.trim() || f.cat.value, cat: f.cat.value, date: f.date.value,
+    amount, currency: cur, rate, mainCents,
+    payers, participantIds, split, stopId: f.stop.value || null };
+  const i = t.expenses.findIndex(x => x.id === rec.id);
+  if (i >= 0) { rec.createdAt = t.expenses[i].createdAt; rec.editedAt = new Date().toISOString(); t.expenses[i] = rec; }
+  else { rec.createdAt = new Date().toISOString(); t.expenses.push(rec); }
+  if (i < 0) t.last = { payerId: payerIds[0], currency: cur, rate, cat: rec.cat };
+  save(); view.showForm = false; view.presetStopId = ''; view.editId = ''; render();
+}
+function payerToggle(f) {
+  const multi = f.querySelectorAll('input[name=py]:checked').length > 1;
+  f.querySelectorAll('.pv').forEach(x => x.style.display = multi ? '' : 'none');
+}
+function delExpense(id) { if (!confirm('删除这笔支出？')) return; const t = trip(); t.expenses = t.expenses.filter(e => e.id !== id); save(); render(); }
+function addStop(ev) {
+  ev.preventDefault();
+  const f = ev.target, name = f.sname.value.trim();
+  if (!name) return;
+  const t = trip();
+  (t.stops = t.stops || []).push({ id: uid(), name, date: f.sdate.value, note: f.snote.value.trim() });
+  view.showStopForm = false; save(); render();
+}
+function memberRefs(t, id) {
+  return t.expenses.filter(e => e.payerId === id || (e.payers && id in e.payers) || e.participantIds.includes(id)).length
+    + (t.settlements || []).filter(s => s.from === id || s.to === id).length;
+}
+function delMemberSafe(t, id) {
+  if (memberRefs(t, id)) return false;
+  t.members = t.members.filter(m => m.id !== id);
+  return true;
+}
+function delMember(id) {
+  const t = trip(), n = memberRefs(t, id);
+  if (n) { alert(`该成员已有 ${n} 笔相关记录，无法直接删除——建议改用重命名，或先处理这些记录。`); return; }
+  if (!confirm(`移除成员「${mname(t, id)}」？`)) return;
+  delMemberSafe(t, id); save(); render();
+}
+function renameMember(id) {
+  const t = trip(), m = t.members.find(m => m.id === id);
+  const name = (prompt('新名字：', m.name) || '').trim();
+  if (!name || name === m.name) return;
+  if (t.members.some(x => x.name === name)) { alert('已有同名成员'); return; }
+  m.name = name; save(); render();
+}
+function detachStop(t, id) {
+  t.stops = t.stops.filter(s => s.id !== id);
+  t.expenses.forEach(e => { if (e.stopId === id) e.stopId = null; });
+}
+function delStop(id) {
+  if (!confirm('删除这个地点？挂在上面的支出会保留，只是不再挂地点。')) return;
+  detachStop(trip(), id);
+  save(); render();
+}
+function markPaid(from, to, cents) {
+  const t = trip();
+  if (!confirm(`确认 ${mname(t,from)} 已转给 ${mname(t,to)} ${t.currency} ${fmt(cents)}？`)) return;
+  t.settlements.push({ from, to, cents, date: new Date().toISOString().slice(0,10) });
+  save(); render();
+}
+
+function render() {
+  const body = view.screen === 'list' ? renderList() : view.screen === 'backup' ? renderBackup() : renderTrip();
+  document.getElementById('app').innerHTML = body + bottomBar();
+  if (view.showRecap) drawRecap();
+}
+function goScreen(s) { view = { screen:s }; render(); }
+function bottomBar() {
+  const items = view.screen === 'trip'
+    ? [['timeline','时间线'],['ledger','流水'],['settle','对账']].map(([k, l]) =>
+        `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')">${l}</button>`)
+    : [['list','行程'],['backup','备份']].map(([k, l]) =>
+        `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')">${l}</button>`);
+  return `<nav class="bottombar"><div class="bb-in">${items.join('')}</div></nav>`;
+}
+function renderBackup() {
+  const days = db.lastExportAt ? Math.floor((Date.now() - db.lastExportAt) / 864e5) : null;
+  const warn = days === null ? '还没备份过，建议现在导出一份。' : days > 7 ? `上次备份是 ${days} 天前，建议现在导出一份。` : '';
+  return `
+  <div class="hero">
+    <div class="eb">Backup</div>
+    <h1>备份</h1>
+    ${warn ? `<p class="muted" style="color:var(--clay)">${warn}</p>` : ''}
+    <p class="muted">账本只存在这台设备的浏览器里，清缓存会丢。定期导出 JSON 存好，或把文件发给同行的人，对方导入即可各留一份。</p>
+  </div>
+  <button class="cta" onclick="exportData()">导出备份</button>
+  <button class="outline" style="width:100%;margin-top:12px" onclick="document.getElementById('imp').click()">导入备份</button>
+  <input id="imp" type="file" accept=".json,application/json" style="display:none" onchange="importData(event)">`;
+}
+function lr(lbl, val, cls) {
+  return `<div class="leader-row"><span class="lbl">${lbl}</span><span class="ld"></span><span class="val ${cls||''}">${val}</span></div>`;
+}
+
+function renderList() {
+  return `
+  <div class="hero">
+    <div class="eb">Ledger</div>
+    <h1>旅行分账</h1>
+    <p class="muted">每一趟旅行，一本账。结束时，干净地收尾。</p>
+  </div>
+  ${db.trips.map(t => `
+    <div class="trip-row" onclick="openTrip('${t.id}')">
+      ${lr(`<span class="t-name">${esc(t.name)}</span>`, `<span class="t-total num">${t.currency} ${fmt(t.expenses.reduce((s,e) => s+e.mainCents, 0))}</span>`)}
+      <div class="t-meta">${t.members.length} 人同行 · ${t.expenses.length} 笔支出
+        <button class="icon-btn" style="float:right" onclick="event.stopPropagation();delTrip('${t.id}')">删除</button></div>
+    </div>`).join('') || ''}
+  ${view.showNewTrip ? `
+  <form class="surface" onsubmit="addTrip(event)" style="margin-top:${db.trips.length ? 22 : 0}px">
+    <div class="eb">新建行程</div>
+    <label>行程名称</label>
+    <input name="name" placeholder="如 2026 日本五日游" required autofocus>
+    <div class="row">
+      <div><label>主货币(结算用)</label><input name="cur" value="MYR" maxlength="5" required></div>
+      <div style="flex:0 0 auto;margin-top:16px"><button class="cta" style="width:auto">创建</button></div>
+    </div>
+    <div style="margin-top:8px">${CURS.map(c => `<button type="button" class="icon-btn" onclick="this.form.cur.value='${c}'">${c}</button>`).join('')}</div>
+  </form>` : `<button class="ghost" style="margin-top:${db.trips.length ? 22 : 0}px" onclick="toggleNewTrip()">＋ 新建一趟行程</button>`}`;
+}
+
+function dateRange(t) {
+  const ds = [...t.expenses.map(e => e.date), ...(t.stops || []).map(s => s.date)].filter(Boolean).sort();
+  const f = d => `${+d.slice(5,7)}.${+d.slice(8,10)}`;
+  return ds.length ? `${f(ds[0])} – ${f(ds[ds.length-1])} · ` : '';
+}
+function statusChip(t) {
+  if (!t.members.length || !t.expenses.length) return '';
+  const plan = settleUp(computeBalances(t));
+  return `<div class="status" onclick="setTab('settle')">
+    <span>${plan.length ? `尚有 <b class="num">${plan.length}</b> 笔待结` : '已结清 · 圆满收官'}</span>
+    <span class="arr">对账 →</span></div>`;
+}
+function renderTrip() {
+  const t = trip();
+  const body = ({ timeline:renderTimeline, ledger:renderLedger, settle:renderSettle })[view.tab](t);
+  return `
+  <button class="icon-btn" style="padding-left:0;margin-bottom:6px" onclick="goScreen('list')">← 所有行程</button>
+  <div class="topbar">
+    <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算</div></div>
+    <div class="avatars">${t.members.map(m => `<span class="av">${esc(m.name.slice(0,1).toUpperCase())}</span>`).join('')}</div>
+  </div>
+  <details class="section" ${t.members.length ? '' : 'open'} style="margin-top:14px">
+    <summary>成员 · ${t.members.length}</summary>
+    <div>${t.members.map(m => `<span class="tag">${esc(m.name)}
+      <button class="icon-btn" style="padding:0 2px" onclick="event.stopPropagation();renameMember('${m.id}')">改</button><button class="icon-btn" style="padding:0 2px" onclick="event.stopPropagation();delMember('${m.id}')">×</button></span>`).join('') || '<span class="muted">先添加成员</span>'}
+    <form class="row" onsubmit="addMember(event)" style="margin-top:12px">
+      <input name="mname" placeholder="成员名字，不用注册">
+      <button class="outline" style="flex:0 0 auto">添加</button>
+    </form></div>
+  </details>
+  ${statusChip(t)}
+  ${view.showForm ? expenseForm(t) : ''}
+  ${body}
+  ${t.members.length ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
+  ${view.showRecap ? recapOverlay() : ''}`;
+}
+
+function renderTimeline(t) {
+  if (!t.members.length) return '<p class="muted">先在上面加成员，才能记账。</p>';
+  const stops = [...(t.stops || [])].sort((a, b) => a.date.localeCompare(b.date));
+  const loose = t.expenses.filter(e => !e.stopId);
+  const lines = list => list.length ? `<div class="exp-lines">${list.map(e =>
+    lr(`<span class="cat-dot"></span>${esc(e.desc)}`, `${fmt(e.mainCents)}`)).join('')}</div>` : '';
+  return `
+  <div class="tl-head">
+    <button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加地点'}</button>
+  </div>
+  ${view.showStopForm ? `
+  <form class="surface" id="stop-form" onsubmit="addStop(event)">
+    <div class="row">
+      <div><label>地点名称</label><input name="sname" placeholder="如 清水寺" required></div>
+      <div><label>日期</label><input name="sdate" type="date" value="${new Date().toISOString().slice(0,10)}" required></div>
+    </div>
+    <label>游记 / 备注(可选)</label><input name="snote" placeholder="写点什么…">
+    <button class="cta" style="margin-top:16px">＋ 加地点</button>
+  </form>` : ''}
+  <div style="margin-top:18px">
+    ${loose.length ? `<div class="stop-date">行程杂项</div>${lines(loose)}` : ''}
+    <button class="stop-add" onclick="openExpenseForm('')">＋ 记一笔 · 不挂地点</button>
+  </div>
+  <div class="timeline"><div class="tl-line"></div>
+    ${stops.map(s => `
+    <div class="stop">
+      <div class="stop-dot"></div>
+      <div class="tl-head"><div>
+        <div class="stop-date">${+s.date.slice(5,7)}/${+s.date.slice(8,10)}</div>
+        <div class="stop-name">${esc(s.name)}</div>
+      </div><button class="icon-btn" onclick="delStop('${s.id}')">移除</button></div>
+      ${s.note ? `<div class="stop-note">${esc(s.note)}</div>` : ''}
+      ${lines(t.expenses.filter(e => e.stopId === s.id))}
+      <button class="stop-add" onclick="openExpenseForm('${s.id}')">＋ 记一笔 · 挂在「${esc(s.name)}」</button>
+    </div>`).join('') || '<p class="muted">还没有地点。地点是可选的——右下角「＋ 记一笔」随时可以记账，不必先加地点。</p>'}
+  </div>`;
+}
+
+function setLedgerFilter(k, v) { (view.ledgerFilter = view.ledgerFilter || { cat:'', payer:'' })[k] = v; render(); }
+function renderLedger(t) {
+  const lf = view.ledgerFilter || { cat:'', payer:'' };
+  const list = t.expenses.filter(e => (!lf.cat || e.cat === lf.cat) && (!lf.payer || lf.payer in e.payers));
+  const groups = {};
+  [...list].sort((a,b) => b.date.localeCompare(a.date)).forEach(e => (groups[e.date] = groups[e.date] || []).push(e));
+  return `
+  ${t.expenses.length ? `<div class="row" style="margin-bottom:6px">
+    <select onchange="setLedgerFilter('cat', this.value)"><option value="">全部类别</option>${CATS.map(c =>
+      `<option ${lf.cat === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+    <select onchange="setLedgerFilter('payer', this.value)"><option value="">全部付款人</option>${t.members.map(m =>
+      `<option value="${m.id}" ${lf.payer === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
+  </div>` : ''}
+  <div class="tl-head">
+    <span class="muted">${lf.cat || lf.payer ? '筛选合计' : '总支出'} <b class="num" style="color:var(--ink)">${t.currency} ${fmt(list.reduce((s,e) => s+e.mainCents, 0))}</b></span>
+  </div>
+  ${Object.entries(groups).map(([date, list]) => `
+    <div class="date-h">${date}</div>
+    ${list.map(e => `
+      <div class="exp-row">
+        <div style="flex:1">
+          <div style="font-weight:600">${esc(e.desc)}</div>
+          <div class="who">${Object.keys(e.payers).map(id => esc(mname(t, id))).join('、')} 付 · ${e.participantIds.length === t.members.length ? '全员' : e.participantIds.map(id => esc(mname(t,id))).join('、')}分摊${e.stopId ? ' · ' + esc(((t.stops || []).find(s => s.id === e.stopId) || {name:'?'}).name) : ''}${e.editedAt ? ` · 编辑于 ${e.editedAt.slice(0,10)}` : ''}</div>
+        </div>
+        <div class="amt-r">
+          <div class="main num">${t.currency} ${fmt(e.mainCents)}</div>
+          ${e.currency !== t.currency ? `<div class="orig">${e.currency} ${e.amount}</div>` : ''}
+        </div>
+        <button class="icon-btn" onclick="openEditExpense('${e.id}')">改</button>
+        <button class="icon-btn" onclick="delExpense('${e.id}')">×</button>
+      </div>`).join('')}
+    `).join('') || `<p class="muted">${lf.cat || lf.payer ? '没有符合筛选的支出。' : '还没有支出。'}</p>`}`;
+}
+
+function expenseForm(t) {
+  const e = view.editId ? t.expenses.find(x => x.id === view.editId) : null;
+  const preset = e ? (e.stopId || '') : view.presetStopId;
+  const presetName = preset && (t.stops || []).find(s => s.id === preset);
+  const last = t.last || {};
+  const cur0   = e ? e.currency : (last.currency || t.currency);
+  const rate0  = e ? e.rate     : (cur0 === t.currency ? 1 : last.rate || 1);
+  const payers0 = e ? e.payers
+    : { [t.members.some(m => m.id === last.payerId) ? last.payerId : t.members[0].id]: 1 };
+  const multiPay = Object.keys(payers0).length > 1;
+  const pv0 = id => multiPay && id in payers0 ? +(payers0[id] / (e.rate || 1) / 100).toFixed(2) : '';
+  const cat0   = [e && e.cat, last.cat].find(c => CATS.includes(c)) || CATS[0];
+  const date0  = e ? e.date : presetName && presetName.date || new Date().toISOString().slice(0,10);
+  const sp = (e && e.split) || { type:'equal' };
+  const svStyle = sp.type === 'equal' ? 'display:none' : '';
+  return `<form class="surface" id="expense-form" onsubmit="addExpense(event)">
+    <div class="eb">${e ? '编辑支出' : '记一笔'}${presetName ? ` · 挂在「${esc(presetName.name)}」` : ''}</div>
+    <div class="row">
+      <div><label>金额</label><input name="amount" type="number" step="any" min="0" inputmode="decimal" value="${e ? e.amount : ''}" required autofocus></div>
+      <div><label>货币</label><input name="cur" value="${esc(cur0)}" maxlength="5"
+        oninput="this.form.rate.disabled = this.value.trim().toUpperCase() === '${t.currency}'"></div>
+      <div><label>汇率 → ${t.currency}</label><input name="rate" type="number" step="any" min="0" value="${rate0}" ${cur0 !== t.currency ? '' : 'disabled'}></div>
+    </div>
+    <div style="margin-top:6px">${CURS.map(c => `<button type="button" class="icon-btn" onclick="const f=this.form;f.cur.value='${c}';f.rate.disabled='${c}'==='${t.currency}'">${c}</button>`).join('')}</div>
+    <label>付款人(可多选合付，${esc(t.currency)} 以外按原币填各自付了多少)</label>
+    <div class="checks">${t.members.map(m =>
+      `<label><input type="checkbox" name="py" value="${m.id}" ${m.id in payers0 ? 'checked' : ''} onchange="payerToggle(this.form)">${esc(m.name)}<input class="sv pv" name="pv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${pv0(m.id)}" style="${multiPay ? '' : 'display:none'}"></label>`).join('')}</div>
+    <label>日期</label><input name="date" type="date" value="${date0}" required>
+    <label>类别</label>
+    <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${c}</label>`).join('')}</div>
+    <label>分法</label>
+    <select name="split" onchange="this.form.querySelectorAll('.sv').forEach(x => x.style.display = this.value === 'equal' ? 'none' : '')">
+      <option value="equal">平分</option>
+      <option value="shares" ${sp.type === 'shares' ? 'selected' : ''}>按份数(如大人 2 份小孩 1 份)</option>
+      <option value="amount" ${sp.type === 'amount' ? 'selected' : ''}>按金额(各人实际消费，${esc(t.currency)} 以外按原币填)</option>
+    </select>
+    <label>参与人(默认全员)</label>
+    <div class="checks">${t.members.map(m =>
+      `<label><input type="checkbox" name="pt" value="${m.id}" ${!e || e.participantIds.includes(m.id) ? 'checked' : ''}>${esc(m.name)}<input class="sv" name="sv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${sp.values && sp.values[m.id] != null ? sp.values[m.id] : ''}" style="${svStyle}"></label>`).join('')}</div>
+    <div class="row">
+      <div><label>备注(可选)</label><input name="desc" placeholder="如 一兰拉面" value="${e ? esc(e.desc) : ''}"></div>
+      <div><label>挂在地点(可选)</label><select name="stop"><option value="">不挂地点</option>${(t.stops || []).map(s =>
+        `<option value="${s.id}" ${s.id === preset ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
+    </div>
+    <button class="cta" style="margin-top:18px">${e ? '保存修改' : '保存这一笔'}</button>
+  </form>`;
+}
+
+function statRows(pairs, unit) {
+  const max = Math.max(...pairs.map(p => p[1]), 1);
+  return pairs.map(([l, c]) => `<div class="stat"><span class="sl">${esc(l)}</span><div class="bar"><i style="width:${(c / max * 100).toFixed(1)}%"></i></div><span class="sv2 num">${unit} ${fmt(c)}</span></div>`).join('');
+}
+
+function renderSettle(t) {
+  if (!t.members.length) return '<p class="muted">先加成员。</p>';
+  const bal = computeBalances(t);
+  const plan = settleUp(bal);
+  const settled = !plan.length && t.expenses.length;
+  const ids = {}; t.members.forEach(m => ids[m.id] = 0);
+  const spend = {...ids}, paid = {...ids};
+  for (const e of t.expenses) {
+    const shares = expenseShares(e, ids);
+    if (!shares) continue;
+    for (const [id, c] of Object.entries(e.payers)) if (id in paid) paid[id] += c;
+    for (const [id, c] of Object.entries(shares)) spend[id] += c;
+  }
+  const by = key => { const g = {}; t.expenses.forEach(e => g[key(e)] = (g[key(e)] || 0) + e.mainCents); return Object.entries(g); };
+  return `
+  <div class="s2-title">${settled ? '圆满收官' : '回国前，理清这本账'}</div>
+  <div class="s2-sub">${settled ? '<span class="stamp">已结清</span>' : `尚有 ${plan.length} 笔转账，即可结清`}</div>
+  ${t.members.map(m => lr(esc(m.name), `${bal[m.id] >= 0 ? '+' : ''}${fmt(bal[m.id])}`,
+    `num ${bal[m.id] > 0 ? 'pos' : bal[m.id] < 0 ? 'neg' : ''}`)).map(x => `<div class="balance-row">${x}</div>`).join('')}
+  ${plan.length ? `<h2>转账建议 · 最少 ${plan.length} 笔</h2>
+  <p class="muted" style="font-size:12.5px;margin-bottom:6px">先算出每人净余额，再用最少的转账笔数互相抵扣——所以每笔转账不一定对应某一张小票，明细仅列直接相关的账。</p>` : ''}
+  ${plan.map(p => {
+    const d = transferDetail(t, p.from, p.to);
+    return `<div class="transfer">
+      <div class="t-row route"><span>${esc(mname(t,p.from))}</span><span class="arrow">→</span><span>${esc(mname(t,p.to))}</span><span class="t-amt">${t.currency} ${fmt(p.cents)}</span></div>
+      ${d.lines.length ? `<details class="t-detail">
+        <summary>查看明细 · ${d.lines.length} 笔</summary>
+        <div class="detail-line">${d.lines.map(x => lr(esc(x.desc), fmt(x.cents))).join('')}
+        ${d.sum !== p.cents ? `<div style="margin-top:6px">经多人互相抵扣后为 ${t.currency} ${fmt(p.cents)}</div>` : ''}</div>
+      </details>` : `<div class="detail-line">由多人债务互相抵扣而来</div>`}
+      <div class="t-actions"><button class="outline" onclick="markPaid('${p.from}','${p.to}',${p.cents})">标记已还</button></div>
+    </div>`;
+  }).join('')}
+  ${t.expenses.length ? `
+  <h2>钱花哪儿了</h2>
+  <details class="section" open><summary>按类别<span></span></summary><div>${statRows(by(e => e.cat).sort((a, b) => b[1] - a[1]), t.currency)}</div></details>
+  <details class="section"><summary>按天<span></span></summary><div>${statRows(by(e => e.date).sort((a, b) => a[0].localeCompare(b[0])), t.currency)}</div></details>
+  <details class="section"><summary>按人 · 应摊消费<span></span></summary><div>${statRows(t.members.map(m => [m.name, spend[m.id]]).sort((a, b) => b[1] - a[1]), t.currency)}</div></details>
+  <details class="section"><summary>按人 · 垫付<span></span></summary><div>${statRows(t.members.map(m => [m.name, paid[m.id]]).sort((a, b) => b[1] - a[1]), t.currency)}</div></details>
+  <button class="outline" style="width:100%;margin-top:26px" onclick="openRecap()">生成回忆卡</button>` : ''}
+  ${(t.settlements || []).length ? `<h2>已还记录</h2>${t.settlements.map(s =>
+    `<div class="exp-row"><span class="who">${s.date} ${esc(mname(t,s.from))} → ${esc(mname(t,s.to))}</span><span class="num">${t.currency} ${fmt(s.cents)}</span></div>`).join('')}` : ''}`;
+}
+
+function recapOverlay() {
+  const t = trip(), s = recapStats(t);
+  return `<div class="overlay" onclick="if(event.target===this)closeRecap()">
+    <div class="recap-card">
+      <div class="recap-title">${esc(t.name)}</div>
+      <div class="recap-sub">${s.range}</div>
+      <div class="recap-rule"></div>
+      <div class="recap-stats">
+        <div class="stat-box"><div class="stat-num">${s.days}</div><div class="stat-lb">天</div></div>
+        <div class="stat-box"><div class="stat-num">${t.expenses.length}</div><div class="stat-lb">笔支出</div></div>
+        <div class="stat-box"><div class="stat-num">${(t.stops || []).length}</div><div class="stat-lb">地点</div></div>
+      </div>
+      <div class="recap-total">总花费<b>${t.currency} ${fmt(s.total)}</b></div>
+      <div class="recap-facts">${s.facts.map(f => `<div class="recap-fact">${esc(f)}</div>`).join('')}</div>
+      ${s.settled ? '<div class="recap-stamp">已结清</div>' : ''}
+    </div>
+    <canvas id="recap"></canvas>
+    <div class="row" style="flex:0 0 auto">
+      <button class="cta" style="width:auto;background:#fff;color:#1B1B16" onclick="saveRecap()">保存分享卡片</button>
+      <button class="outline" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="closeRecap()">关闭</button>
+    </div>
+  </div>`;
+}
+function recapStats(t) {
+  const dates = [...t.expenses.map(e => e.date), ...(t.stops || []).map(s => s.date)].filter(Boolean).sort();
+  const days = dates.length ? Math.round((new Date(dates[dates.length-1]) - new Date(dates[0])) / 864e5) + 1 : 0;
+  const total = t.expenses.reduce((s,e) => s + e.mainCents, 0);
+  const top = obj => Object.entries(obj).sort((a,b) => b[1] - a[1])[0];
+  const byDay = {}, byCat = {}, paid = {};
+  t.expenses.forEach(e => {
+    byDay[e.date] = (byDay[e.date] || 0) + e.mainCents;
+    byCat[e.cat]  = (byCat[e.cat]  || 0) + e.mainCents;
+    Object.entries(e.payers).forEach(([id, c]) => { const n = mname(t, id); paid[n] = (paid[n] || 0) + c; });
+  });
+  const fd = d => `${+d.slice(5,7)}.${+d.slice(8,10)}`;
+  return {
+    range: dates.length ? `${dates[0].slice(0,4)}.${fd(dates[0])} – ${fd(dates[dates.length-1])}` : '',
+    days, total,
+    facts: t.expenses.length ? [
+      `花费最高的一天 · ${+top(byDay)[0].slice(5,7)}/${+top(byDay)[0].slice(8,10)}(${t.currency} ${fmt(top(byDay)[1])})`,
+      `花得最多的类别 · ${top(byCat)[0]}`,
+      `垫付最多 · ${top(paid)[0]}，记得谢谢 TA`,
+    ] : [],
+    settled: !settleUp(computeBalances(t)).length && t.expenses.length > 0,
+  };
+}
+function drawRecap() {
+  const t = trip(), s = recapStats(t);
+  const c = document.getElementById('recap'), x = c.getContext('2d');
+  const W = 360, H = 540, S = 2;
+  c.width = W*S; c.height = H*S; x.scale(S, S);
+  const sans = '-apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
+  const serif = 'Georgia,"Songti SC",serif';
+  const g = x.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#232019'); g.addColorStop(1, '#171512');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#fff'; x.font = 'italic 700 25px ' + serif; x.fillText(t.name, 30, 64);
+  x.fillStyle = '#B8A98A'; x.font = '600 11px ' + sans; x.textBaseline = 'alphabetic';
+  x.fillText(s.range.toUpperCase(), 30, 86);
+  x.strokeStyle = '#8A6B3E'; x.globalAlpha = .6; x.lineWidth = 1;
+  x.beginPath(); x.moveTo(30, 108); x.lineTo(W-30, 108); x.stroke(); x.globalAlpha = 1;
+  const stats = [[String(s.days), '天'], [String(t.expenses.length), '笔支出'], [String((t.stops || []).length), '地点']];
+  x.textAlign = 'center';
+  stats.forEach(([n, lb], i) => {
+    const cx = 30 + (i+.5)*((W-60)/3);
+    x.fillStyle = '#fff'; x.font = 'italic 700 22px ' + serif; x.fillText(n, cx, 148);
+    x.fillStyle = '#B8A98A'; x.font = '600 9px ' + sans; x.fillText(lb.toUpperCase(), cx, 165);
+  });
+  x.fillStyle = '#B8A98A'; x.font = '600 10px ' + sans; x.fillText('总花费', W/2, 200);
+  x.fillStyle = '#fff'; x.font = 'italic 700 20px ' + serif; x.fillText(`${t.currency} ${fmt(s.total)}`, W/2, 224);
+  x.textAlign = 'left';
+  s.facts.forEach((f, i) => {
+    const y = 262 + i*40;
+    x.fillStyle = '#8A6B3E'; x.fillRect(30, y-11, 1.5, 26);
+    x.fillStyle = '#E3DCC8'; x.font = '500 12px ' + sans; x.fillText(f, 40, y+3);
+  });
+  if (s.settled) {
+    x.strokeStyle = 'rgba(255,255,255,.15)'; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(30, H-46); x.lineTo(W-30, H-46); x.stroke();
+    x.fillStyle = '#8A6B3E'; x.font = '600 10px ' + sans; x.textAlign = 'right';
+    x.fillText('已 结 清', W-30, H-26); x.textAlign = 'left';
+  }
+  x.fillStyle = '#6B6455'; x.font = '500 9px ' + sans; x.textAlign = 'center';
+  x.fillText('旅行分账', W/2, H-16); x.textAlign = 'left';
+}
+function saveRecap() {
+  const a = document.createElement('a');
+  a.download = `${trip().name}-回忆卡.png`;
+  a.href = document.getElementById('recap').toDataURL('image/png');
+  a.click();
+}
+render();
+</script>
+</body>
+</html>
