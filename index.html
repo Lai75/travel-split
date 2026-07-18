@@ -343,8 +343,8 @@ function transferDetail(t, from, to) {
 })();
 
 /* ============ V2 多人同步(Supabase) ============ */
-const SUPA_URL = '';  // 填入 Supabase 项目 URL 与 anon key 即启用同步;留空则纯本地运行
-const SUPA_KEY = '';
+const SUPA_URL = 'https://zxqueifzbonuyzwhbbzg.supabase.co';  // 留空则纯本地运行
+const SUPA_KEY = 'sb_publishable_ehH07iIcs-Ad9kcGZU_jQw_jOWMH9Sd';
 const supa = (SUPA_URL && typeof supabase !== 'undefined') ? supabase.createClient(SUPA_URL, SUPA_KEY) : null;
 const SS = 'travel-split-sync';
 let sync = JSON.parse(localStorage.getItem(SS) || '{"outbox":[],"snap":{},"lastPulled":{},"me":{}}');
