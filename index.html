@@ -176,6 +176,7 @@
 </head>
 <body>
 <div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 'use strict';
 const LS = 'travel-split-v1';
@@ -185,9 +186,13 @@ function migratePayers(db) {
     if (!e.payers && e.payerId) { e.payers = { [e.payerId]: e.mainCents }; delete e.payerId; }
   }));
 }
+function migrateIds(db) {
+  db.trips.forEach(t => (t.settlements || []).forEach(s => { if (!s.id) s.id = uid(); }));
+}
 migratePayers(db);
+migrateIds(db);
 let view = { screen:'list', tripId:null, tab:'timeline', showForm:false, presetStopId:'', showStopForm:false, showRecap:false, showNewTrip:false };
-const save = () => localStorage.setItem(LS, JSON.stringify(db));
+const save = () => { localStorage.setItem(LS, JSON.stringify(db)); pushChanges(trip()); };
 const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc  = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const trip = () => db.trips.find(t => t.id === view.tripId);
@@ -195,6 +200,7 @@ const fmt  = c => (c/100).toFixed(2);
 const mname = (t,id) => (t.members.find(m => m.id === id) || {name:'?'}).name;
 const CATS = ['餐饮','住宿','交通','门票','购物','其他'];
 const CURS = ['MYR','JPY','USD','CNY','SGD'];
+const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements' };
 
 function mainPayer(e, memberSet) {
   let best = null;
@@ -305,12 +311,214 @@ function transferDetail(t, from, to) {
   const mdb = { trips:[{ expenses:[{ payerId:'A', mainCents:100 }] }] };
   migratePayers(mdb);
   console.assert(mdb.trips[0].expenses[0].payers.A === 100 && !('payerId' in mdb.trips[0].expenses[0]), '旧数据迁移算错', mdb);
+
+  // V2:存量结算记录补 id
+  const midb = { trips:[{ expenses:[], settlements:[{from:'A',to:'B',cents:1}] }] };
+  migrateIds(midb);
+  console.assert(!!midb.trips[0].settlements[0].id, '结算迁移未补 id', midb);
+  // V2:行程拆记录(trip 元信息一条,剔除本机偏好 last)/差异/墓碑/远端合并
+  const ts = { id:'T', name:'旅', currency:'MYR', last:{payerId:'A'},
+    members:[{id:'A',name:'安'}], expenses:[{id:'e1', payers:{A:100}, participantIds:['A'], mainCents:100}],
+    stops:[], settlements:[] };
+  const recs = tripToRecords(ts);
+  console.assert(recs.length === 3 && recs[0].kind === 'trip' && !('last' in recs[0].data), '拆记录算错', recs);
+  const snap0 = {};
+  const d1 = diffRecords(snap0, ts);
+  console.assert(d1.length === 3 && d1.every(r => !r.deleted), '首次差异应全量', d1);
+  d1.forEach(r => snap0[r.id] = JSON.stringify(r.data));
+  console.assert(diffRecords(snap0, ts).length === 0, '无改动应无差异');
+  ts.expenses = [];
+  const d2 = diffRecords(snap0, ts);
+  console.assert(d2.length === 1 && d2[0].deleted && d2[0].id === 'e1', '删除应出墓碑', d2);
+  console.assert(applyRemote(ts, { id:'e1', kind:'expense', data:{id:'e1', payers:{A:100}, participantIds:['A'], mainCents:100} }) === true
+    && ts.expenses.length === 1, '远端新增未合并', ts);
+  console.assert(applyRemote(ts, { id:'e1', kind:'expense', data:ts.expenses[0] }) === false, '相同数据应判无变化');
+  console.assert(applyRemote(ts, { id:'e1', kind:'', deleted:true }) === true && ts.expenses.length === 0, '远端删除未生效', ts);
+  console.assert(applyRemote(ts, { id:'trip', kind:'trip', data:{name:'新名', currency:'MYR'} }) === true && ts.name === '新名', '行程元信息未合并', ts);
   // 删除地点:支出保留,只解除挂载
   const t5 = { stops:[{id:'s1'},{id:'s2'}], expenses:[{id:'e1', stopId:'s1'},{id:'e2', stopId:'s2'}] };
   detachStop(t5, 's1');
   console.assert(t5.stops.length === 1 && t5.expenses.length === 2 && t5.expenses[0].stopId === null
     && t5.expenses[1].stopId === 's2', '删地点后支出丢了', t5);
 })();
+
+/* ============ V2 多人同步(Supabase) ============ */
+const SUPA_URL = '';  // 填入 Supabase 项目 URL 与 anon key 即启用同步;留空则纯本地运行
+const SUPA_KEY = '';
+const supa = (SUPA_URL && typeof supabase !== 'undefined') ? supabase.createClient(SUPA_URL, SUPA_KEY) : null;
+const SS = 'travel-split-sync';
+let sync = JSON.parse(localStorage.getItem(SS) || '{"outbox":[],"snap":{},"lastPulled":{},"me":{}}');
+const saveSync = () => localStorage.setItem(SS, JSON.stringify(sync));
+
+function tripToRecords(t) {
+  const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency } }];
+  const add = (kind, list) => (list || []).forEach(x => recs.push({ id:x.id, kind, data:x }));
+  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements);
+  return recs;
+}
+function diffRecords(snap, t) {
+  const out = [], seen = {};
+  for (const r of tripToRecords(t)) {
+    seen[r.id] = true;
+    if (snap[r.id] !== JSON.stringify(r.data)) out.push({ ...r, deleted:false });
+  }
+  for (const id of Object.keys(snap)) if (!seen[id]) out.push({ id, kind:'', data:{}, deleted:true });
+  return out;
+}
+function applyRemote(t, rec) {
+  if (rec.kind === 'trip') {
+    if (rec.deleted || (t.name === rec.data.name && t.currency === rec.data.currency)) return false;
+    t.name = rec.data.name; t.currency = rec.data.currency;
+    return true;
+  }
+  if (rec.deleted) {
+    let hit = false;
+    for (const k of Object.values(KIND_ARR)) {
+      const a = t[k] || [], i = a.findIndex(x => x.id === rec.id);
+      if (i >= 0) { a.splice(i, 1); hit = true; }
+    }
+    return hit;
+  }
+  const a = t[KIND_ARR[rec.kind]] = t[KIND_ARR[rec.kind]] || [];
+  const i = a.findIndex(x => x.id === rec.id);
+  if (i >= 0) {
+    if (JSON.stringify(a[i]) === JSON.stringify(rec.data)) return false;
+    a[i] = rec.data;
+  } else a.push(rec.data);
+  return true;
+}
+
+function pushChanges(t) {
+  if (!supa || !t || !t.shareCode) return;
+  const snap = sync.snap[t.id] = sync.snap[t.id] || {};
+  const diffs = diffRecords(snap, t);
+  if (!diffs.length) return;
+  const now = new Date().toISOString();
+  for (const r of diffs) {
+    sync.outbox = sync.outbox.filter(o => !(o.trip_id === t.id && o.id === r.id));
+    sync.outbox.push({ trip_id:t.id, id:r.id, kind:r.kind, data:r.data, updated_at:now, deleted:r.deleted });
+    if (r.deleted) delete snap[r.id]; else snap[r.id] = JSON.stringify(r.data);
+  }
+  saveSync();
+  flush();
+}
+async function ensureAuth() {
+  const { data:{ session } } = await supa.auth.getSession();
+  if (session) return true;
+  const { error } = await supa.auth.signInAnonymously();
+  return !error;
+}
+let flushing = false;
+async function flush() {
+  if (!supa || flushing || !sync.outbox.length) return;
+  flushing = true;
+  try {
+    if (!(await ensureAuth())) return;
+    const batch = sync.outbox.slice();
+    const { error } = await supa.from('records').upsert(batch);
+    if (error) return;
+    sync.outbox = sync.outbox.filter(o => !batch.includes(o));
+    saveSync();
+    safeRender();
+  } finally { flushing = false; }
+}
+function applyRemoteBatch(tid, recs) {
+  const t = db.trips.find(x => x.id === tid);
+  if (!t) return;
+  const snap = sync.snap[tid] = sync.snap[tid] || {};
+  let changed = false;
+  for (const rec of recs) {
+    if (!rec || !rec.id) continue;
+    if (sync.outbox.some(o => o.trip_id === tid && o.id === rec.id)) continue; // 本地有待推更新,以本地为准
+    if (applyRemote(t, rec)) changed = true;
+    if (rec.deleted) delete snap[rec.id]; else snap[rec.id] = JSON.stringify(rec.data);
+    if (rec.updated_at > (sync.lastPulled[tid] || '')) sync.lastPulled[tid] = rec.updated_at;
+  }
+  saveSync();
+  if (changed) { save(); safeRender(); }
+}
+async function pullTrip(tid) {
+  const { data } = await supa.from('records').select('*').eq('trip_id', tid).gt('updated_at', sync.lastPulled[tid] || '1970-01-01');
+  if (data) applyRemoteBatch(tid, data);
+}
+let chan = null;
+function subscribeTrip(tid) {
+  if (chan) { supa.removeChannel(chan); chan = null; }
+  chan = supa.channel('trip-' + tid)
+    .on('postgres_changes', { event:'*', schema:'public', table:'records', filter:'trip_id=eq.' + tid },
+      p => applyRemoteBatch(tid, [p.new]))
+    .subscribe();
+}
+async function syncTrip(tid) {
+  const t = db.trips.find(x => x.id === tid);
+  if (!supa || !t || !t.shareCode) return;
+  if (!(await ensureAuth())) return;
+  await pullTrip(tid);
+  subscribeTrip(tid);
+  flush();
+}
+function safeRender() { // 表单打开时不重绘,免得吃掉正在输入的内容;数据已落盘,下次操作自然刷新
+  if (view.showForm || view.showStopForm || view.showClaim) return;
+  render();
+}
+async function shareTrip() {
+  const t = trip();
+  if (!supa) { alert('还没配置同步——把文件顶部 SUPA_URL / SUPA_KEY 填上即可启用'); return; }
+  if (!t.shareCode) {
+    if (!(await ensureAuth())) { alert('连接失败，稍后再试'); return; }
+    const code = uid();
+    const { error } = await supa.rpc('share_trip', { p_trip_id: t.id, p_join_code: code });
+    if (error) { alert('分享失败：' + error.message); return; }
+    t.shareCode = code;
+    save(); // 首次分享:snap 为空,这一步把全部记录送入 outbox 并上传
+    subscribeTrip(t.id);
+  }
+  view.showInvite = true; render();
+}
+function inviteLink(t) { return location.origin + location.pathname + '?join=' + t.shareCode; }
+function copyInvite() {
+  navigator.clipboard.writeText(inviteLink(trip())).then(() => alert('链接已复制，发给同伴吧'));
+}
+async function joinByCode(code) {
+  render();
+  if (!supa) { alert('还没配置同步，无法通过邀请链接加入'); return; }
+  if (!(await ensureAuth())) { alert('连接失败，稍后再试'); return; }
+  const { data: tid, error } = await supa.rpc('join_trip', { p_code: code });
+  history.replaceState(null, '', location.pathname);
+  if (error || !tid) { alert('邀请码无效'); render(); return; }
+  let t = db.trips.find(x => x.id === tid);
+  if (!t) { t = { id: tid, name:'…', currency:'MYR', members:[], expenses:[], settlements:[], stops:[], shareCode: code }; db.trips.unshift(t); }
+  t.shareCode = code;
+  await pullTrip(tid);
+  save();
+  view = { screen:'trip', tripId: tid, tab:'timeline' };
+  if (!sync.me[tid]) view.showClaim = true;
+  subscribeTrip(tid);
+  render();
+}
+async function claimMember(id) {
+  const t = trip(), m = t.members.find(x => x.id === id);
+  const { data:{ user } } = await supa.auth.getUser();
+  if (user) m.userId = user.id;
+  sync.me[t.id] = id; saveSync();
+  view.showClaim = false; save(); render();
+}
+function claimNew(ev) {
+  ev.preventDefault();
+  const name = ev.target.mname.value.trim();
+  if (!name) return;
+  const t = trip();
+  if (t.members.some(m => m.name === name)) { alert('已有同名成员——如果那就是你，点名字认领'); return; }
+  const m = { id: uid(), name };
+  t.members.push(m);
+  claimMember(m.id);
+}
+function syncBadge(t) {
+  if (!t.shareCode) return '';
+  const n = sync.outbox.filter(o => o.trip_id === t.id).length;
+  return ` · ${n ? n + ' 条待同步' : '已同步'}`;
+}
+if (typeof window !== 'undefined') window.addEventListener('online', flush);
 
 function exportData() {
   db.lastExportAt = Date.now(); save();
@@ -340,6 +548,7 @@ function importData(ev) {
     if (dup && !confirm(`有 ${dup} 个行程本机已存在，导入会用文件里的版本覆盖它们。继续？`)) return;
     const r = mergeTrips(db.trips, data.trips);
     migratePayers(db);
+    migrateIds(db);
     save(); render();
     alert(`导入完成：新增 ${r.added} 个行程${r.replaced ? `，覆盖 ${r.replaced} 个` : ''}。`);
   });
@@ -355,10 +564,13 @@ function addTrip(ev) {
 }
 function delTrip(id) {
   const t = db.trips.find(t => t.id === id);
-  if (!confirm(`删除行程「${t.name}」？账目会一起删除，不可恢复。`)) return;
-  db.trips = db.trips.filter(t => t.id !== id); save(); render();
+  if (!confirm(`删除行程「${t.name}」？账目会一起删除，不可恢复。${t.shareCode ? '（只删本机副本，同伴那份还在）' : ''}`)) return;
+  db.trips = db.trips.filter(t => t.id !== id);
+  delete sync.snap[id]; delete sync.lastPulled[id]; delete sync.me[id];
+  sync.outbox = sync.outbox.filter(o => o.trip_id !== id); saveSync();
+  save(); render();
 }
-function openTrip(id) { view = { screen:'trip', tripId:id, tab:'timeline', showForm:false }; render(); }
+function openTrip(id) { view = { screen:'trip', tripId:id, tab:'timeline', showForm:false }; render(); syncTrip(id); }
 function setTab(tab)  { view.tab = tab; view.showForm = false; view.editId = ''; render(); }
 function scrollToId(id) { requestAnimationFrame(() => requestAnimationFrame(() =>
   document.getElementById(id)?.scrollIntoView({ behavior:'smooth', block:'start' }))); }
@@ -474,7 +686,7 @@ function delStop(id) {
 function markPaid(from, to, cents) {
   const t = trip();
   if (!confirm(`确认 ${mname(t,from)} 已转给 ${mname(t,to)} ${t.currency} ${fmt(cents)}？`)) return;
-  t.settlements.push({ from, to, cents, date: new Date().toISOString().slice(0,10) });
+  t.settlements.push({ id: uid(), from, to, cents, date: new Date().toISOString().slice(0,10) });
   save(); render();
 }
 
@@ -554,7 +766,7 @@ function renderTrip() {
   return `
   <button class="icon-btn" style="padding-left:0;margin-bottom:6px" onclick="goScreen('list')">← 所有行程</button>
   <div class="topbar">
-    <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算</div></div>
+    <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算${syncBadge(t)}</div></div>
     <div class="avatars">${t.members.map(m => `<span class="av">${esc(m.name.slice(0,1).toUpperCase())}</span>`).join('')}</div>
   </div>
   <details class="section" ${t.members.length ? '' : 'open'} style="margin-top:14px">
@@ -564,13 +776,42 @@ function renderTrip() {
     <form class="row" onsubmit="addMember(event)" style="margin-top:12px">
       <input name="mname" placeholder="成员名字，不用注册">
       <button class="outline" style="flex:0 0 auto">添加</button>
-    </form></div>
+    </form>
+    <button class="ghost" onclick="shareTrip()" style="margin-top:8px">${t.shareCode ? '邀请链接' : '邀请同伴 · 开启多人同步'}</button></div>
   </details>
   ${statusChip(t)}
   ${view.showForm ? expenseForm(t) : ''}
   ${body}
   ${t.members.length ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
-  ${view.showRecap ? recapOverlay() : ''}`;
+  ${view.showRecap ? recapOverlay() : ''}
+  ${view.showInvite ? inviteOverlay(t) : ''}
+  ${view.showClaim ? claimOverlay(t) : ''}`;
+}
+function inviteOverlay(t) {
+  return `<div class="overlay" onclick="if(event.target===this){view.showInvite=false;render()}">
+    <div class="surface" style="width:min(340px,92vw)">
+      <div class="eb">邀请同伴</div>
+      <p class="muted" style="margin-top:8px">发这个链接给同行的人，点开即入，不用注册：</p>
+      <p class="muted" style="margin-top:8px;word-break:break-all;color:var(--ink)">${esc(inviteLink(t))}</p>
+      <div class="row" style="margin-top:14px">
+        <button class="cta" style="width:auto" onclick="copyInvite()">复制链接</button>
+        <button class="outline" onclick="view.showInvite=false;render()">关闭</button>
+      </div>
+    </div></div>`;
+}
+function claimOverlay(t) {
+  const un = t.members.filter(m => !m.userId);
+  return `<div class="overlay">
+    <div class="surface" style="width:min(340px,92vw)">
+      <div class="eb">你是谁？</div>
+      <p class="muted" style="margin-top:8px">认领身份后，这台设备记账时付款人默认是你。</p>
+      <div class="checks" style="margin-top:12px">${un.map(m =>
+        `<label onclick="claimMember('${m.id}')" style="cursor:pointer">${esc(m.name)}</label>`).join('') || '<span class="muted">成员都已被认领——填你的名字加入</span>'}</div>
+      <form class="row" onsubmit="claimNew(event)" style="margin-top:14px">
+        <input name="mname" placeholder="都不是？填你的名字">
+        <button class="outline" style="flex:0 0 auto">加入</button>
+      </form>
+    </div></div>`;
 }
 
 function renderTimeline(t) {
@@ -653,7 +894,7 @@ function expenseForm(t) {
   const cur0   = e ? e.currency : (last.currency || t.currency);
   const rate0  = e ? e.rate     : (cur0 === t.currency ? 1 : last.rate || 1);
   const payers0 = e ? e.payers
-    : { [t.members.some(m => m.id === last.payerId) ? last.payerId : t.members[0].id]: 1 };
+    : { [[last.payerId, sync.me[t.id], t.members[0].id].find(id => t.members.some(m => m.id === id))]: 1 };
   const multiPay = Object.keys(payers0).length > 1;
   const pv0 = id => multiPay && id in payers0 ? +(payers0[id] / (e.rate || 1) / 100).toFixed(2) : '';
   const cat0   = [e && e.cat, last.cat].find(c => CATS.includes(c)) || CATS[0];
@@ -833,7 +1074,8 @@ function saveRecap() {
   a.href = document.getElementById('recap').toDataURL('image/png');
   a.click();
 }
-render();
+const joinCode0 = typeof location !== 'undefined' && new URLSearchParams(location.search).get('join');
+if (joinCode0) joinByCode(joinCode0); else render();
 </script>
 </body>
 </html>
