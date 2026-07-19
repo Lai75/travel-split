@@ -1,0 +1,9 @@
+{
+  "name": "旅行分账",
+  "short_name": "旅行分账",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F7F7F4",
+  "theme_color": "#F7F7F4",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

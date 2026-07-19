@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F7F7F4">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>旅行分账</title>
 <style>
   /* ============================================================
@@ -335,6 +338,12 @@ function transferDetail(t, from, to) {
   console.assert(applyRemote(ts, { id:'e1', kind:'expense', data:ts.expenses[0] }) === false, '相同数据应判无变化');
   console.assert(applyRemote(ts, { id:'e1', kind:'', deleted:true }) === true && ts.expenses.length === 0, '远端删除未生效', ts);
   console.assert(applyRemote(ts, { id:'trip', kind:'trip', data:{name:'新名', currency:'MYR'} }) === true && ts.name === '新名', '行程元信息未合并', ts);
+  // CSV:逗号/引号/换行要转义,导出带 BOM、含付款人与金额
+  console.assert(csvCell('a,"b"\nc') === '"a,""b""\nc"', 'CSV 转义错');
+  const tc = tripCsv({ currency:'MYR', members:[{id:'A',name:'安'}], stops:[], expenses:[
+    { date:'2026-01-01', desc:'饭,面', cat:'餐饮', amount:10, currency:'MYR', rate:1,
+      mainCents:1000, payers:{A:1000}, participantIds:['A'], stopId:null }]});
+  console.assert(tc.startsWith('﻿') && tc.includes('"饭,面"') && tc.includes('安 10.00'), 'CSV 导出错', tc);
   // 删除地点:支出保留,只解除挂载
   const t5 = { stops:[{id:'s1'},{id:'s2'}], expenses:[{id:'e1', stopId:'s1'},{id:'e2', stopId:'s2'}] };
   detachStop(t5, 's1');
@@ -520,6 +529,32 @@ function syncBadge(t) {
 }
 if (typeof window !== 'undefined') window.addEventListener('online', flush);
 
+function csvCell(s) { s = String(s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+function tripCsv(t) {
+  const head = ['日期','备注','类别','原币金额','货币','汇率',`主币金额(${t.currency})`,'付款人','参与人','地点'];
+  const rows = [...t.expenses].sort((a,b) => a.date.localeCompare(b.date)).map(e => [
+    e.date, e.desc, e.cat, e.amount, e.currency, e.rate, fmt(e.mainCents),
+    Object.entries(e.payers).map(([id,c]) => `${mname(t,id)} ${fmt(c)}`).join('；'),
+    e.participantIds.map(id => mname(t,id)).join('、'),
+    e.stopId ? (((t.stops || []).find(s => s.id === e.stopId)) || {name:''}).name : ''
+  ]);
+  return '\uFEFF' + [head, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n'); // BOM 让 Excel 认出 UTF-8
+}
+function exportCsv() {
+  const a = document.createElement('a');
+  a.download = `${trip().name}-流水.csv`;
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(tripCsv(trip()));
+  a.click();
+}
+async function fetchRate(f) {
+  const cur = f.cur.value.trim().toUpperCase(), main = trip().currency;
+  if (!cur || cur === main) return;
+  try {
+    const r = await (await fetch(`https://api.frankfurter.dev/v1/latest?base=${cur}&symbols=${main}`)).json();
+    if (r.rates && r.rates[main]) f.rate.value = r.rates[main];
+    else alert(`查不到 ${cur} → ${main} 的汇率，手动填吧`);
+  } catch { alert('汇率服务连不上（离线？），手动填吧'); }
+}
 function exportData() {
   db.lastExportAt = Date.now(); save();
   const a = document.createElement('a');
@@ -859,7 +894,8 @@ function renderLedger(t) {
   const groups = {};
   [...list].sort((a,b) => b.date.localeCompare(a.date)).forEach(e => (groups[e.date] = groups[e.date] || []).push(e));
   return `
-  ${t.expenses.length ? `<div class="row" style="margin-bottom:6px">
+  ${t.expenses.length ? `<div class="tl-head"><button class="ghost" onclick="exportCsv()">导出 CSV</button></div>
+  <div class="row" style="margin-bottom:6px">
     <select onchange="setLedgerFilter('cat', this.value)"><option value="">全部类别</option>${CATS.map(c =>
       `<option ${lf.cat === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
     <select onchange="setLedgerFilter('payer', this.value)"><option value="">全部付款人</option>${t.members.map(m =>
@@ -909,7 +945,7 @@ function expenseForm(t) {
         oninput="this.form.rate.disabled = this.value.trim().toUpperCase() === '${t.currency}'"></div>
       <div><label>汇率 → ${t.currency}</label><input name="rate" type="number" step="any" min="0" value="${rate0}" ${cur0 !== t.currency ? '' : 'disabled'}></div>
     </div>
-    <div style="margin-top:6px">${CURS.map(c => `<button type="button" class="icon-btn" onclick="const f=this.form;f.cur.value='${c}';f.rate.disabled='${c}'==='${t.currency}'">${c}</button>`).join('')}</div>
+    <div style="margin-top:6px">${CURS.map(c => `<button type="button" class="icon-btn" onclick="const f=this.form;f.cur.value='${c}';f.rate.disabled='${c}'==='${t.currency}'">${c}</button>`).join('')}<button type="button" class="icon-btn" style="color:var(--accent-ink)" onclick="fetchRate(this.form)">自动查汇率</button></div>
     <label>付款人(可多选合付，${esc(t.currency)} 以外按原币填各自付了多少)</label>
     <div class="checks">${t.members.map(m =>
       `<label><input type="checkbox" name="py" value="${m.id}" ${m.id in payers0 ? 'checked' : ''} onchange="payerToggle(this.form)">${esc(m.name)}<input class="sv pv" name="pv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${pv0(m.id)}" style="${multiPay ? '' : 'display:none'}"></label>`).join('')}</div>
@@ -1076,6 +1112,8 @@ function saveRecap() {
 }
 const joinCode0 = typeof location !== 'undefined' && new URLSearchParams(location.search).get('join');
 if (joinCode0) joinByCode(joinCode0); else render();
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && location.protocol === 'https:')
+  navigator.serviceWorker.register('sw.js');
 </script>
 </body>
 </html>
