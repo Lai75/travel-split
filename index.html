@@ -3,218 +3,243 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#F7F7F4">
+<meta name="theme-color" content="#EEF0F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E0E16" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>旅行分账</title>
 <style>
   /* ============================================================
-     设计方向:「克制的高级感」
-     参照的是市面上偏"安静"的高端 App 的通用语法:大留白、
-     发丝分割线代替大量描边卡片、衬线字只用在少数几个地方做点缀、
-     金额用斜体衬线数字(像精品店小票上的价格),不用鲜艳色块、
-     不用阴影堆叠、不用旋转贴纸——用排版和留白本身撑住"高级"。
+     设计方向:「汽水感」
+     冷调浅底 + 电光靛蓝做品牌色;荧光青柠只留给"操作和进度"
+     (记一笔、Day 标签、已去过的勾),让它成为页面里唯一抢眼的颜色。
+     圆体粗字、胶囊选项、浮动底栏;类别和行程类型用 emoji 当图标。
      ============================================================ */
   :root {
-    --bg:#F7F7F4; --surface:#FFFFFF;
-    --ink:#1B1B16; --sub:#8C8A80; --faint:#C9C6B9; --line:#E6E3D9;
-    --accent:#8A6B3E; --accent-ink:#6B5027; --clay:#8C5C4C; --sage:#57614F;
+    --bg:#EEF0F7; --surface:#FFFFFF; --field:#F2F3FA;
+    --ink:#14141F; --sub:#6C6E86; --faint:#B7B9CC; --line:#E1E3EF;
+    --brand:#4F46FF; --brand-soft:#E8E7FF; --accent:#4F46FF; --accent-ink:#4F46FF;
+    --lime:#C6F432; --lime-soft:#F0FBC8; --pink-soft:#FFE2EB; --sun-soft:#FFF0B3; --sky-soft:#DCF0FF;
+    --pos-ink:#3B6B00; --neg-ink:#C2185B; --clay:#C2185B; --sage:#3B6B00;
+    --shadow:0 1px 2px rgba(20,20,60,.05), 0 10px 26px -14px rgba(20,20,60,.22);
+    --font: ui-rounded,'SF Pro Rounded','PingFang SC','HarmonyOS Sans SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+    --serif: var(--font);
     --mono: ui-monospace,'SF Mono',Consolas,Menlo,monospace;
-    --serif: Georgia,'Songti SC','STSong','Noto Serif SC',serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0E0E16; --surface:#1A1A27; --field:#242435;
+      --ink:#F3F3FA; --sub:#9A9CB6; --faint:#4A4B63; --line:#2C2C40;
+      --brand:#7068FF; --brand-soft:#2B2A55; --accent:#8F89FF; --accent-ink:#A9A4FF;
+      --lime-soft:#2C3510; --pink-soft:#3D1F2B; --sun-soft:#3A3213; --sky-soft:#17303F;
+      --pos-ink:#C6F432; --neg-ink:#FF8FB1; --clay:#FF8FB1; --sage:#C6F432;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -14px rgba(0,0,0,.6);
+    }
   }
   * { box-sizing:border-box; margin:0; }
-  body {
-    font-family:-apple-system,system-ui,'PingFang SC','Microsoft YaHei',sans-serif;
-    background:var(--bg); color:var(--ink); min-height:100vh; -webkit-font-smoothing:antialiased;
-  }
-  #app { max-width:520px; margin:0 auto; padding:34px 22px 150px; }
+  body { font-family:var(--font); background:var(--bg); color:var(--ink); min-height:100vh;
+    -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent; }
+  #app { max-width:520px; margin:0 auto; padding:30px 18px 150px; }
   .num { font-variant-numeric:tabular-nums; }
-  .serif { font-family:var(--serif); }
 
-  h1 { font-family:var(--serif); font-size:27px; font-weight:700; letter-spacing:-.01em; }
-  h2 { font-size:11px; font-weight:700; letter-spacing:.16em; color:var(--sub); text-transform:uppercase; margin:30px 0 14px; }
-  .eb { font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--accent-ink); }
+  h1 { font-size:30px; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
+  h2 { font-size:19px; font-weight:800; letter-spacing:-.01em; margin:30px 0 12px; }
+  .eb { font-size:15px; font-weight:800; color:var(--ink); }
   .muted { color:var(--sub); font-size:13.5px; line-height:1.75; }
 
-  button { font:inherit; border:none; border-radius:10px; cursor:pointer; padding:13px 20px; font-weight:600; }
-  .cta { background:var(--ink); color:#fff; width:100%; letter-spacing:.02em; }
-  .cta:hover { background:#000; }
-  .outline { background:none; border:1px solid var(--line); color:var(--ink); padding:11px 18px; }
-  .outline:hover { border-color:var(--faint); }
-  .ghost { background:none; color:var(--ink); text-decoration:underline; text-underline-offset:4px;
-    text-decoration-color:var(--faint); padding:6px 0; font-weight:500; font-size:13.5px; }
-  .icon-btn { background:none; color:var(--sub); padding:4px 6px; font-size:13px; font-weight:500; }
+  button { font:inherit; border:none; border-radius:14px; cursor:pointer; padding:13px 20px; font-weight:700;
+    background:none; color:var(--ink); transition:transform .12s ease; }
+  button:active { transform:scale(.97); }
+  .cta { background:var(--brand); color:#fff; width:100%; padding:15px 20px; border-radius:16px; font-size:16px; font-weight:800; }
+  .outline { background:var(--surface); border:1.5px solid var(--line); color:var(--ink); padding:11px 18px; border-radius:14px; }
+  .ghost { color:var(--brand); font-weight:700; font-size:14px; padding:6px 0; margin-left:12px; }
+  .ghost:first-child { margin-left:0; }
+  .icon-btn { color:var(--sub); padding:4px 8px; font-size:13px; font-weight:600; }
+  button:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid var(--brand); outline-offset:2px; }
 
-  .surface { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:20px; margin-bottom:16px; }
-  input, select { font:inherit; padding:10px 2px; border:none; border-bottom:1px solid var(--line);
-    width:100%; background:transparent; color:var(--ink); border-radius:0; }
-  input:focus, select:focus { outline:none; border-bottom-color:var(--ink); }
-  label { font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--sub);
-    display:block; margin:16px 0 4px; }
-  .row { display:flex; gap:18px; align-items:flex-end; }
+  .surface { background:var(--surface); border-radius:24px; padding:20px; margin-bottom:16px; box-shadow:var(--shadow); }
+  :where(input:not([type=checkbox]):not([type=radio]):not([type=file]), select) {
+    font:inherit; padding:12px 14px; border:none; width:100%; min-width:0; background:var(--field); color:var(--ink); border-radius:14px; }
+  :where(input, select):focus { outline:none; box-shadow:0 0 0 2px var(--brand); }
+  label { font-size:12.5px; font-weight:700; color:var(--sub); display:block; margin:16px 0 6px; }
+  .row { display:flex; gap:12px; align-items:flex-end; }
   .row > * { flex:1; }
+
   .checks { display:flex; flex-wrap:wrap; gap:8px; }
-  .checks label { display:flex; align-items:center; gap:5px; margin:0; font-size:13px; letter-spacing:0;
-    text-transform:none; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-weight:500; }
-  .checks input { width:auto; accent-color:var(--ink); }
+  .checks label { display:flex; align-items:center; gap:6px; margin:0; font-size:13.5px; color:var(--ink); background:var(--field);
+    border-radius:99px; padding:8px 14px; font-weight:600; cursor:pointer; }
+  .checks input { width:auto; accent-color:var(--brand); }
   .checks input[type=radio] { position:absolute; opacity:0; width:0; }
-  .checks label:has(input[type=radio]:checked) { background:var(--ink); border-color:var(--ink); color:#fff; }
-  .checks label:has(input[type=radio]:focus-visible) { outline:2px solid var(--accent); outline-offset:2px; }
-  .sv { width:56px; padding:2px 4px; border:none; border-bottom:1px solid var(--faint); }
+  .checks label:has(input[type=checkbox]:checked) { background:var(--brand-soft); box-shadow:inset 0 0 0 1.5px var(--brand); }
+  .checks label:has(input[type=radio]:checked) { background:var(--brand); color:#fff; }
+  .checks label:has(input[type=radio]:focus-visible) { outline:3px solid var(--brand); outline-offset:2px; }
+  .sv { width:60px; padding:4px 8px; font-size:13px; border-radius:8px; background:var(--surface); }
+  .chip { background:var(--field); border-radius:99px; padding:7px 15px; font-size:13.5px; font-weight:700; color:var(--ink); }
+  .chip.on { background:var(--brand); color:#fff; }
+  .amt-in { font-size:38px; font-weight:800; letter-spacing:-.02em; padding:10px 14px; }
+  .cur-in { font-size:18px; font-weight:800; text-align:center; }
+  .hint { font-size:12px; color:var(--brand); font-weight:600; margin-top:6px; }
 
   .topbar { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-  .trip-date { font-size:12.5px; color:var(--sub); margin-top:5px; }
-  .avatars { display:flex; flex-shrink:0; }
-  .av { width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
-    background:#fff; color:var(--ink); font-size:11.5px; font-weight:700; border:1.3px solid var(--ink); }
-  .avatars .av { margin-left:-7px; } .avatars .av:first-child { margin-left:0; }
-  .tag { display:inline-block; color:var(--ink); border:1px solid var(--line); border-radius:999px;
-    padding:5px 13px; margin:0 6px 6px 0; font-size:13px; }
+  .trip-date { font-size:13px; color:var(--sub); margin-top:6px; font-weight:500; }
+  .avatars { display:flex; flex-shrink:0; padding-top:4px; }
+  .av { width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+    color:#14141F; font-size:12.5px; font-weight:800; border:2.5px solid var(--bg); margin-left:-9px; }
+  .avatars .av:first-child { margin-left:0; }
+  .av.a0 { background:#C9C6FF; } .av.a1 { background:var(--lime); } .av.a2 { background:#FFB8CF; }
+  .av.a3 { background:#FFE27A; } .av.a4 { background:#A9DBFF; }
+  .tag { display:inline-flex; align-items:center; background:var(--brand-soft); border-radius:99px; padding:5px 6px 5px 14px;
+    margin:0 6px 6px 0; font-size:13.5px; font-weight:700; }
 
-  .status { display:flex; justify-content:space-between; align-items:center; padding:15px 2px;
-    border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin:16px 0 6px;
-    font-size:13.5px; cursor:pointer; }
-  .status .arr { color:var(--sub); font-size:12px; }
+  .status { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:var(--lime-soft);
+    border-radius:18px; margin:16px 0 8px; font-size:14px; font-weight:700; cursor:pointer; }
+  .status .arr { color:var(--sub); font-size:12.5px; font-weight:600; }
 
-  .bottombar { position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--line);
-    z-index:15; padding-bottom:env(safe-area-inset-bottom); }
-  .bottombar .bb-in { max-width:520px; margin:0 auto; display:flex; }
-  .bottombar button { flex:1; background:none; border-radius:0; padding:15px 0 17px; font-size:13px;
-    font-weight:600; color:var(--sub); letter-spacing:.06em; }
-  .bottombar button.on { color:var(--ink); box-shadow:inset 0 2px 0 var(--ink); }
+  .bottombar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + env(safe-area-inset-bottom));
+    width:min(492px, calc(100% - 24px)); background:var(--surface); border-radius:26px; padding:6px; z-index:15;
+    box-shadow:0 12px 34px -10px rgba(20,20,70,.35); }
+  .bottombar .bb-in { display:flex; gap:4px; }
+  .bottombar button { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 0 7px;
+    border-radius:20px; font-size:11.5px; font-weight:700; color:var(--sub); }
+  .bottombar button .ic { font-size:19px; line-height:1.2; filter:grayscale(1); opacity:.7; }
+  .bottombar button.on { background:var(--brand); color:#fff; }
+  .bottombar button.on .ic { filter:none; opacity:1; }
 
   .leader-row { display:flex; align-items:baseline; gap:6px; }
   .leader-row .lbl { white-space:nowrap; }
-  .leader-row .ld { flex:1; border-bottom:1px dotted var(--faint); margin:0 2px 4px; min-width:12px; }
-  .leader-row .val { white-space:nowrap; font-weight:600; }
+  .leader-row .ld { flex:1; border-bottom:1.5px dotted var(--line); margin:0 2px 4px; min-width:12px; }
+  .leader-row .val { white-space:nowrap; font-weight:700; }
 
-  .tl-head { display:flex; justify-content:space-between; align-items:baseline; margin:0 0 4px; }
-  .timeline { position:relative; padding-left:18px; margin-top:14px; }
-  .tl-line { position:absolute; left:4px; top:5px; bottom:14px; width:1px; background:var(--line); }
-  .stop { position:relative; margin-bottom:26px; }
-  .stop-dot { position:absolute; left:-18px; top:5px; width:8px; height:8px; border-radius:50%; background:var(--ink); }
-  .stop-date { font-size:11px; letter-spacing:.1em; color:var(--sub); text-transform:uppercase; }
-  .stop-name { font-family:var(--serif); font-size:18px; font-weight:700; margin-top:2px; }
-  .stop-note { font-size:13px; color:var(--sub); margin:4px 0 12px; font-style:italic; }
-  .exp-lines { margin-top:4px; }
-  .exp-lines .leader-row { font-size:13px; padding:5px 0; }
-  .exp-lines .cat-dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--accent); margin-right:2px; }
+  .tl-head { display:flex; justify-content:space-between; align-items:center; margin:0 0 4px; gap:10px; }
+  .tl-head h2 { font-size:22px; }
 
-  .fab { position:fixed; bottom:84px; left:50%; transform:translateX(-50%);
-    border-radius:999px; padding:14px 24px; font-size:14px; font-weight:600; white-space:nowrap;
-    background:var(--ink); color:#fff; z-index:10; box-shadow:0 16px 34px -12px rgba(0,0,0,.4); }
-  .stop-add { font-size:12px; color:var(--accent-ink); background:none; border:none; padding:6px 0 0;
-    font-weight:600; text-decoration:underline; text-decoration-color:var(--faint); text-underline-offset:3px; }
+  .stop-add { font-size:12.5px; color:var(--brand); background:none; border:none; padding:8px 0 0; font-weight:700; }
+  .fab { position:fixed; bottom:calc(92px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%);
+    border-radius:99px; padding:14px 26px; font-size:15px; font-weight:800; white-space:nowrap; background:var(--lime);
+    color:#14141F; z-index:10; box-shadow:0 14px 30px -10px rgba(20,20,70,.5); }
+  .fab:active { transform:translateX(-50%) scale(.97); }
 
-  .exp-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0;
-    border-bottom:1px solid var(--line); gap:10px; }
-  .exp-row:last-child { border-bottom:none; }
+  /* 旅行计划 */
+  .plan-day { display:flex; justify-content:space-between; align-items:center; margin:28px 0 2px; }
+  .plan-day b { font-size:22px; font-weight:800; letter-spacing:-.02em; }
+  .plan-day span { background:var(--lime); color:#14141F; border-radius:99px; padding:4px 12px; font-size:12px; font-weight:800; }
+  .plan-item { display:flex; gap:12px; background:var(--surface); border-radius:20px; padding:14px; margin-top:10px; box-shadow:var(--shadow); }
+  .plan-item.done { opacity:.62; }
+  .plan-item.done .pn { text-decoration:line-through; text-decoration-color:var(--faint); }
+  .tick { flex:0 0 24px; width:24px; height:24px; border-radius:50%; border:2px solid var(--faint); padding:0; margin-top:2px;
+    display:flex; align-items:center; justify-content:center; }
+  .tick.on { background:var(--lime); border-color:var(--lime); }
+  .tick.on::after { content:'✓'; color:#14141F; font-size:13px; font-weight:900; line-height:1; }
+  .pt-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .pt { background:var(--brand-soft); color:var(--brand); border-radius:99px; padding:2px 10px; font-size:12.5px; font-weight:800; }
+  .pt.none { background:var(--field); color:var(--sub); font-weight:600; }
+  .ptag { background:var(--field); border-radius:99px; padding:2px 10px; font-size:12px; font-weight:700; color:var(--sub); }
+  .ptag[data-k="景点"]::before { content:'📍 '; } .ptag[data-k="美食"]::before { content:'🍜 '; }
+  .ptag[data-k="住宿"]::before { content:'🛏 '; }  .ptag[data-k="交通"]::before { content:'🚆 '; }
+  .ptag[data-k="其他"]::before { content:'✨ '; }
+  .pn { font-size:18px; font-weight:800; margin-top:6px; letter-spacing:-.01em; }
+  .pm { font-size:13px; color:var(--sub); margin-top:4px; line-height:1.6; }
+  .plan-item a { font-size:12.5px; font-weight:700; color:var(--brand); text-decoration:none; }
+  .ph-grid { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .ph { width:84px; height:84px; border-radius:14px; object-fit:cover; background:var(--field); cursor:pointer; display:block; }
+  button.ph.add { border:2px dashed var(--faint); color:var(--sub); font-size:24px; font-weight:400; padding:0; }
+  .todo { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); }
+  .todo label { display:flex; align-items:center; gap:10px; margin:0; font-size:14.5px; color:var(--ink); font-weight:600; flex:1; }
+  .todo input { width:auto; accent-color:var(--brand); }
+  .todo.done label { color:var(--sub); text-decoration:line-through; }
+
+  /* 流水 */
+  .exp-row { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; gap:10px;
+    background:var(--surface); border-radius:18px; margin-top:8px; }
+  .exp-ic { flex:0 0 42px; width:42px; height:42px; border-radius:14px; background:var(--brand-soft); display:flex;
+    align-items:center; justify-content:center; font-size:20px; }
   .exp-row .who { font-size:12px; color:var(--sub); margin-top:3px; }
   .amt-r { text-align:right; white-space:nowrap; }
-  .amt-r .main { font-weight:700; }
+  .amt-r .main { font-weight:800; }
   .amt-r .orig { font-size:11.5px; color:var(--sub); }
-  .date-h { font-size:11px; letter-spacing:.14em; color:var(--sub); text-transform:uppercase; margin:22px 0 8px; }
+  .date-h { font-size:13px; font-weight:800; color:var(--sub); margin:24px 4px 4px; }
 
-  .s2-title { font-family:var(--serif); font-size:24px; font-weight:700; margin-top:4px; }
-  .s2-sub { font-size:13px; color:var(--sub); margin:8px 0 8px; }
-  .balance-row { padding:13px 0; border-bottom:1px solid var(--line); }
-  .balance-row .val.pos { color:var(--accent-ink); }
-  .balance-row .val.neg { color:var(--clay); }
+  /* 换汇 */
+  .fx-card { background:var(--brand); color:#fff; box-shadow:0 14px 30px -14px rgba(79,70,255,.7); }
+  .fx-card .eb { color:#D6D4FF; }
+  .fx-card .s2-title { font-size:24px; color:#fff; }
+  .fx-card .ld { border-bottom-color:rgba(255,255,255,.35); }
+  .fx-card .muted { color:#D6D4FF; }
 
-  .transfer { padding:20px 0; border-bottom:1px solid var(--line); }
-  .transfer .route { display:flex; align-items:baseline; gap:9px; font-size:16px; font-weight:600; }
-  .transfer .route .arrow { color:var(--sub); font-weight:400; font-size:14px; }
-  .transfer .t-amt { margin-left:auto; font-family:var(--serif); font-style:italic; font-weight:700; font-size:19px; }
+  /* 对账 */
+  .s2-title { font-size:26px; font-weight:800; margin-top:4px; letter-spacing:-.02em; }
+  .s2-sub { font-size:13.5px; color:var(--sub); margin:8px 0 8px; font-weight:500; }
+  .balance-row { padding:13px 16px; background:var(--surface); border-radius:16px; margin-top:8px; }
+  .balance-row .val { padding:2px 12px; border-radius:99px; background:var(--field); }
+  .balance-row .val.pos { background:var(--lime-soft); color:var(--pos-ink); }
+  .balance-row .val.neg { background:var(--pink-soft); color:var(--neg-ink); }
+  .transfer { padding:18px; background:var(--surface); border-radius:22px; margin-top:12px; box-shadow:var(--shadow); }
+  .transfer .route { display:flex; align-items:baseline; gap:9px; font-size:17px; font-weight:800; }
+  .transfer .route .arrow { color:var(--faint); font-weight:700; font-size:15px; }
+  .transfer .t-amt { margin-left:auto; font-size:22px; font-weight:800; color:var(--brand); letter-spacing:-.02em; }
   .transfer .t-row { display:flex; align-items:baseline; }
   .t-detail { margin-top:10px; }
-  .t-detail summary { font-size:12px; color:var(--sub); cursor:pointer; list-style:none; text-decoration:underline;
-    text-decoration-color:var(--faint); text-underline-offset:3px; }
+  .t-detail summary { font-size:12.5px; color:var(--sub); cursor:pointer; list-style:none; font-weight:600; }
   .t-detail summary::-webkit-details-marker { display:none; }
   .detail-line { font-size:12.5px; color:var(--sub); margin-top:8px; line-height:1.9; }
   .t-actions { margin-top:12px; }
-  .stamp { font-size:11.5px; font-weight:700; color:var(--accent-ink); letter-spacing:.1em; text-transform:uppercase;
-    border-bottom:1.5px solid var(--accent); padding-bottom:2px; }
+  .stamp { display:inline-block; font-size:12px; font-weight:800; color:#14141F; background:var(--lime); border-radius:99px; padding:4px 12px; }
 
-  .stat { display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13px; }
-  .stat .sl { flex:0 0 78px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); }
-  .stat .bar { flex:1; height:2px; background:var(--line); }
-  .stat .bar i { display:block; height:100%; background:var(--ink); min-width:2px; }
-  .stat .sv2 { flex:0 0 auto; font-size:12.5px; font-weight:600; white-space:nowrap; }
-  details.section { margin-bottom:4px; }
-  details.section > summary { font-size:13px; font-weight:600; cursor:pointer; list-style:none; padding:11px 0;
-    border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
+  .stat { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:13px; }
+  .stat .sl { flex:0 0 78px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); font-weight:600; }
+  .stat .bar { flex:1; height:10px; background:var(--field); border-radius:99px; overflow:hidden; }
+  .stat .bar i { display:block; height:100%; background:var(--brand); min-width:4px; border-radius:99px; }
+  .stat .sv2 { flex:0 0 auto; font-size:12.5px; font-weight:700; white-space:nowrap; }
+
+  details.section { margin-bottom:6px; }
+  details.section > summary { font-size:14px; font-weight:800; cursor:pointer; list-style:none; padding:14px 16px;
+    background:var(--surface); border-radius:16px; display:flex; justify-content:space-between; }
+  .surface details.section > summary { background:var(--field); }
   details.section > summary::-webkit-details-marker { display:none; }
-  details.section > summary::after { content:'＋'; color:var(--sub); font-weight:300; }
+  details.section > summary::after { content:'＋'; color:var(--brand); font-weight:700; margin-left:10px; }
   details.section[open] > summary::after { content:'－'; }
-  details.section > div { padding:12px 0 6px; }
+  details.section > div { padding:12px 4px 6px; }
 
-  .overlay { position:fixed; inset:0; background:rgba(20,19,15,.82); z-index:20; overflow-y:auto;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:16px; }
+  /* 浮层 / 回忆卡 */
+  .overlay { position:fixed; inset:0; background:rgba(14,14,30,.82); z-index:20; overflow-y:auto; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; padding:16px; }
   .overlay canvas { display:none; }
-  .recap-card { width:min(320px,92vw); background:linear-gradient(165deg,#232019,#171512);
-    border-radius:6px; overflow:hidden; padding:28px 26px 24px; color:#F3EFE4;
-    box-shadow:0 30px 70px -20px rgba(0,0,0,.9); }
-  .recap-title { font-family:var(--serif); font-style:italic; font-size:23px; font-weight:700; color:#fff; }
-  .recap-sub { font-size:11.5px; letter-spacing:.14em; color:#B8A98A; margin-top:6px; text-transform:uppercase; }
-  .recap-rule { height:1px; background:var(--accent); margin:20px 0; opacity:.6; }
+  .recap-card { width:min(320px,92vw); background:var(--brand); border-radius:28px; overflow:hidden; padding:28px 26px 24px; color:#fff;
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.7); }
+  .recap-title { font-size:26px; font-weight:800; letter-spacing:-.02em; color:#fff; }
+  .recap-sub { font-size:12.5px; font-weight:600; color:#D6D4FF; margin-top:6px; }
+  .recap-rule { height:2px; background:var(--lime); margin:20px 0; border-radius:2px; }
   .recap-stats { display:flex; justify-content:space-between; }
   .stat-box { text-align:center; }
-  .stat-num { font-family:var(--serif); font-size:24px; font-weight:700; }
-  .stat-lb { font-size:10px; color:#B8A98A; margin-top:3px; letter-spacing:.1em; text-transform:uppercase; }
-  .recap-total { text-align:center; font-size:12px; color:#B8A98A; margin-top:20px; letter-spacing:.08em; text-transform:uppercase; }
-  .recap-total b { font-family:var(--serif); font-style:italic; color:#fff; font-size:19px; display:block; margin-top:4px; letter-spacing:0; text-transform:none; }
+  .stat-num { font-size:28px; font-weight:800; }
+  .stat-lb { font-size:12px; color:#D6D4FF; margin-top:3px; font-weight:600; }
+  .recap-total { text-align:center; font-size:13px; color:#D6D4FF; margin-top:20px; font-weight:600; }
+  .recap-total b { color:var(--lime); font-size:26px; font-weight:800; display:block; margin-top:4px; }
   .recap-facts { margin-top:20px; display:flex; flex-direction:column; gap:12px; }
-  .recap-fact { font-size:12px; color:#E3DCC8; padding-left:12px; border-left:1.5px solid var(--accent); line-height:1.6; }
-  .recap-stamp { margin-top:20px; text-align:right; font-size:10.5px; letter-spacing:.16em; color:var(--accent);
-    text-transform:uppercase; border-top:1px solid rgba(255,255,255,.15); padding-top:12px; }
+  .recap-fact { font-size:13px; color:#fff; padding-left:12px; border-left:3px solid var(--lime); line-height:1.6; font-weight:600; }
+  .recap-stamp { margin-top:20px; text-align:right; font-size:12px; font-weight:800; color:var(--lime); }
+  .lb-img { max-width:94vw; max-height:70vh; border-radius:16px; background:#000; }
+  .lb-cap { color:#E8E8F5; font-size:13px; font-weight:700; }
 
-  .chip { background:none; border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-size:13px;
-    font-weight:500; color:var(--ink); }
-  .chip.on { background:var(--ink); border-color:var(--ink); color:#fff; }
-  .amt-in { font-family:var(--serif); font-size:36px !important; font-weight:700; padding:6px 2px !important; }
-  .cur-in { font-size:18px !important; font-weight:600; text-align:center; }
-  .hint { font-size:12px; color:var(--accent-ink); }
-  .plan-day { display:flex; justify-content:space-between; align-items:baseline; margin:26px 0 4px;
-    padding-bottom:8px; border-bottom:1px solid var(--ink); }
-  .plan-day b { font-family:var(--serif); font-size:19px; }
-  .plan-day span { font-size:11px; letter-spacing:.12em; color:var(--sub); text-transform:uppercase; }
-  .plan-item { display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--line); }
-  .plan-item .pt { flex:0 0 46px; font-size:13.5px; font-weight:600; padding-top:3px; }
-  .plan-item .pt.none { color:var(--faint); font-weight:400; }
-  .plan-item .pn { font-family:var(--serif); font-size:17px; font-weight:700; }
-  .plan-item .pm { font-size:12.5px; color:var(--sub); margin-top:3px; line-height:1.6; }
-  .fx-card .s2-title { font-size:21px; }
-  .tick { flex:0 0 20px; width:20px; height:20px; border-radius:50%; border:1.4px solid var(--faint); background:none;
-    padding:0; margin-top:3px; display:flex; align-items:center; justify-content:center; }
-  .tick.on { background:var(--ink); border-color:var(--ink); }
-  .tick.on::after { content:'✓'; color:#fff; font-size:11px; line-height:1; }
-  .plan-item.done .pn { color:var(--sub); text-decoration:line-through; text-decoration-color:var(--faint); }
-  .ptag { display:inline-block; font-family:-apple-system,system-ui,'PingFang SC',sans-serif; font-size:10.5px; font-weight:600;
-    letter-spacing:.06em; color:var(--accent-ink); border:1px solid var(--line); border-radius:999px; padding:1px 8px; margin-right:8px; vertical-align:2px; }
-  .plan-item a { font-size:12px; color:var(--accent-ink); text-decoration:underline; text-decoration-color:var(--faint); text-underline-offset:3px; }
-  .ph-grid { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-  .ph { width:76px; height:76px; border-radius:8px; object-fit:cover; background:var(--line); cursor:pointer; display:block; }
-  button.ph.add { border:1px dashed var(--faint); background:none; color:var(--sub); font-size:22px; font-weight:300; padding:0; }
-  .todo { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); }
-  .todo label { display:flex; align-items:center; gap:10px; margin:0; font-size:14px; letter-spacing:0; text-transform:none; color:var(--ink); font-weight:500; flex:1; }
-  .todo input { width:auto; accent-color:var(--ink); }
-  .todo.done label { color:var(--sub); text-decoration:line-through; }
-  .lb-img { max-width:94vw; max-height:70vh; border-radius:6px; background:#000; }
-  .lb-cap { color:#E3DCC8; font-size:12.5px; letter-spacing:.08em; }
+  /* 行程列表 */
+  .hero { padding:6px 0 22px; }
+  .hero h1 { font-size:36px; }
+  .hero p { margin-top:8px; }
+  .trip-row { padding:18px; border-radius:24px; margin-bottom:12px; cursor:pointer; }
+  .trip-row.c0 { background:var(--brand-soft); } .trip-row.c1 { background:var(--lime-soft); } .trip-row.c2 { background:var(--pink-soft); }
+  .trip-row.c3 { background:var(--sun-soft); }  .trip-row.c4 { background:var(--sky-soft); }
+  .trip-row .t-name { font-size:20px; font-weight:800; letter-spacing:-.01em; }
+  .trip-row .t-total { display:block; font-size:28px; font-weight:800; letter-spacing:-.02em; margin-top:10px; }
+  .trip-row .t-meta { font-size:12.5px; color:var(--sub); margin-top:6px; font-weight:600; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   @media print {
-    body { background:#fff; }
+    body { background:#fff; color:#000; }
     .bottombar, .fab, button, .icon-btn, .ghost { display:none !important; }
     #app { padding:0; max-width:none; }
-    .plan-item, .plan-day { break-inside:avoid; }
-    a { color:inherit; text-decoration:none; }
+    .plan-item, .plan-day { break-inside:avoid; box-shadow:none; border:1px solid #ddd; }
+    a { color:inherit; }
   }
-  .hero { padding:2px 0 26px; }
-  .hero h1 { margin-top:8px; }
-  .hero p { margin-top:8px; }
-  .trip-row { padding:18px 0; border-bottom:1px solid var(--line); cursor:pointer; }
-  .trip-row .t-name { font-family:var(--serif); font-size:18px; font-weight:700; }
-  .trip-row .t-meta { font-size:12px; color:var(--sub); margin-top:4px; }
-  .trip-row .t-total { font-weight:600; }
 </style>
 </head>
 <body>
@@ -309,6 +334,8 @@ function transferDetail(t, from, to) {
 }
 const KINDS = ['景点','美食','住宿','交通','其他'];
 const PHOTO_MAX = 12;
+const KICON = { 景点:'📍', 美食:'🍜', 住宿:'🛏', 交通:'🚆', 其他:'✨' };
+const CATICON = { 餐饮:'🍜', 住宿:'🛏', 交通:'🚆', 门票:'🎫', 购物:'🛍', 其他:'✨' };
 function tripStatus(dates, today) {
   if (!dates.length) return '';
   const ds = [...dates].sort(), a = ds[0], b = ds[ds.length - 1];
@@ -971,10 +998,10 @@ function render() {
 function goScreen(s) { view = { screen:s }; render(); }
 function bottomBar() {
   const items = view.screen === 'trip'
-    ? [['plan','计划'],['ledger','流水'],['fx','换汇'],['settle','对账']].map(([k, l]) =>
-        `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')">${l}</button>`)
-    : [['list','行程'],['backup','备份']].map(([k, l]) =>
-        `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')">${l}</button>`);
+    ? [['plan','🗓','计划'],['ledger','🧾','流水'],['fx','💱','换汇'],['settle','🤝','对账']].map(([k, ic, l]) =>
+        `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')"><span class="ic">${ic}</span>${l}</button>`)
+    : [['list','🧳','行程'],['backup','💾','备份']].map(([k, ic, l]) =>
+        `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')"><span class="ic">${ic}</span>${l}</button>`);
   return `<nav class="bottombar"><div class="bb-in">${items.join('')}</div></nav>`;
 }
 function renderBackup() {
@@ -998,27 +1025,27 @@ function lr(lbl, val, cls) {
 function renderList() {
   return `
   <div class="hero">
-    <div class="eb">Ledger</div>
-    <h1>旅行分账</h1>
-    <p class="muted">每一趟旅行，一本账。结束时，干净地收尾。</p>
+    <h1>旅行分账 ✈️</h1>
+    <p class="muted">出发、记账，到家前就结清。</p>
   </div>
-  ${db.trips.map(t => `
-    <div class="trip-row" onclick="openTrip('${t.id}')">
-      ${lr(`<span class="t-name">${esc(t.name)}</span>`, `<span class="t-total num">${t.currency} ${fmt(t.expenses.reduce((s,e) => s+e.mainCents, 0))}</span>`)}
+  ${db.trips.map((t, i) => `
+    <div class="trip-row c${i % 5}" onclick="openTrip('${t.id}')">
+      <div class="t-name">${esc(t.name)}</div>
+      <span class="t-total num">${t.currency} ${fmt(t.expenses.reduce((s,e) => s+e.mainCents, 0))}</span>
       <div class="t-meta">${t.members.length} 人同行 · ${t.expenses.length} 笔支出
-        <button class="icon-btn" style="float:right" onclick="event.stopPropagation();delTrip('${t.id}')">删除</button></div>
-    </div>`).join('') || ''}
+        <button class="icon-btn" style="float:right;padding:0 4px" onclick="event.stopPropagation();delTrip('${t.id}')">删除</button></div>
+    </div>`).join('')}
   ${view.showNewTrip ? `
-  <form class="surface" onsubmit="addTrip(event)" style="margin-top:${db.trips.length ? 22 : 0}px">
+  <form class="surface" onsubmit="addTrip(event)">
     <div class="eb">新建行程</div>
     <label>行程名称</label>
     <input name="name" placeholder="如 2026 日本五日游" required autofocus>
     <div class="row">
       <div><label>主货币(结算用)</label><input name="cur" value="MYR" maxlength="5" required></div>
-      <div style="flex:0 0 auto;margin-top:16px"><button class="cta" style="width:auto">创建</button></div>
+      <div style="flex:0 0 auto"><button class="cta" style="width:auto">创建</button></div>
     </div>
-    <div style="margin-top:8px">${CURS.map(c => `<button type="button" class="icon-btn" onclick="this.form.cur.value='${c}'">${c}</button>`).join('')}</div>
-  </form>` : `<button class="ghost" style="margin-top:${db.trips.length ? 22 : 0}px" onclick="toggleNewTrip()">＋ 新建一趟行程</button>`}`;
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">${CURS.map(c => `<button type="button" class="chip" onclick="this.form.cur.value='${c}'">${c}</button>`).join('')}</div>
+  </form>` : `<button class="cta" onclick="toggleNewTrip()">＋ 新建一趟行程</button>`}`;
 }
 
 function dateRange(t) {
@@ -1040,7 +1067,7 @@ function renderTrip() {
   <button class="icon-btn" style="padding-left:0;margin-bottom:6px" onclick="goScreen('list')">← 所有行程</button>
   <div class="topbar">
     <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算${syncBadge(t)}</div></div>
-    <div class="avatars">${t.members.map(m => `<span class="av">${esc(m.name.slice(0,1).toUpperCase())}</span>`).join('')}</div>
+    <div class="avatars">${t.members.map((m, i) => `<span class="av a${i % 5}">${esc(m.name.slice(0,1).toUpperCase())}</span>`).join('')}</div>
   </div>
   <details class="section" ${t.members.length ? '' : 'open'} style="margin-top:14px">
     <summary>成员 · ${t.members.length}</summary>
@@ -1113,7 +1140,7 @@ function renderPlan(t) {
     </div>
     <label>去哪里</label><input name="sname" placeholder="如 清水寺" value="${es ? esc(es.name) : ''}" required autofocus>
     <label>类型</label>
-    <div class="checks">${KINDS.map(k => `<label><input type="radio" name="skind" value="${k}" ${k === kind0 ? 'checked' : ''}>${k}</label>`).join('')}</div>
+    <div class="checks">${KINDS.map(k => `<label><input type="radio" name="skind" value="${k}" ${k === kind0 ? 'checked' : ''}>${KICON[k]} ${k}</label>`).join('')}</div>
     <label>备注(可选)</label><input name="snote" placeholder="订位号、交通、要带什么…" value="${es ? esc(es.note || '') : ''}">
     <button class="cta" style="margin-top:16px">${es ? '保存修改' : '加入计划'}</button>
     ${es ? '' : '<p class="muted" style="font-size:12px;margin-top:10px">加入后，在这一条下面点「＋ 照片」就能放照片。</p>'}
@@ -1128,9 +1155,9 @@ function renderPlan(t) {
       const ph = s.photos || [];
       return `<div class="plan-item ${s.done ? 'done' : ''}">
         <button class="tick ${s.done ? 'on' : ''}" onclick="toggleDone('${s.id}')" aria-label="标记已去过"></button>
-        <div class="pt num ${s.time ? '' : 'none'}">${s.time || '全天'}</div>
         <div style="flex:1;min-width:0">
-          <div class="pn">${s.kind ? `<span class="ptag">${esc(s.kind)}</span>` : ''}${esc(s.name)}</div>
+          <div class="pt-row"><span class="pt num ${s.time ? '' : 'none'}">${s.time || '全天'}</span>${s.kind ? `<span class="ptag" data-k="${esc(s.kind)}">${esc(s.kind)}</span>` : ''}</div>
+          <div class="pn">${esc(s.name)}</div>
           ${s.note ? `<div class="pm">${esc(s.note)}</div>` : ''}
           ${spent ? `<div class="pm">已花 ${t.currency} ${fmt(spent)}</div>` : ''}
           <div class="pm"><a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(s.name)}" target="_blank" rel="noopener">在地图中打开</a></div>
@@ -1254,8 +1281,9 @@ function renderLedger(t) {
     <div class="date-h">${date}</div>
     ${list.map(e => `
       <div class="exp-row">
-        <div style="flex:1">
-          <div style="font-weight:600">${esc(e.desc)}</div>
+        <div class="exp-ic">${CATICON[e.cat] || '🧾'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700">${esc(e.desc)}</div>
           <div class="who">${Object.keys(e.payers).map(id => esc(mname(t, id))).join('、')} 付 · ${e.participantIds.length === t.members.length ? '全员' : e.participantIds.map(id => esc(mname(t,id))).join('、')}分摊${e.stopId ? ' · ' + esc(((t.stops || []).find(s => s.id === e.stopId) || {name:'?'}).name) : ''}${e.editedAt ? ` · 编辑于 ${e.editedAt.slice(0,10)}` : ''}</div>
         </div>
         <div class="amt-r">
@@ -1310,7 +1338,7 @@ function expenseForm(t) {
       <div class="hint">${hint0}</div>
     </div>
     <label>类别</label>
-    <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${c}</label>`).join('')}</div>
+    <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${CATICON[c]} ${c}</label>`).join('')}</div>
     <details class="section" ${isEdit ? 'open' : ''} style="margin-top:18px">
       <summary>更多选项${dflt}</summary>
       <div>
@@ -1444,37 +1472,37 @@ function drawRecap() {
   const W = 360, H = 540, S = 2;
   c.width = W*S; c.height = H*S; x.scale(S, S);
   const sans = '-apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-serif';
-  const serif = 'Georgia,"Songti SC",serif';
+  const serif = 'ui-rounded,"PingFang SC",system-ui,sans-serif';
   const g = x.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, '#232019'); g.addColorStop(1, '#171512');
+  g.addColorStop(0, '#5B52FF'); g.addColorStop(1, '#3F36E8');
   x.fillStyle = g; x.fillRect(0, 0, W, H);
-  x.fillStyle = '#fff'; x.font = 'italic 700 25px ' + serif; x.fillText(t.name, 30, 64);
-  x.fillStyle = '#B8A98A'; x.font = '600 11px ' + sans; x.textBaseline = 'alphabetic';
+  x.fillStyle = '#fff'; x.font = '800 25px ' + serif; x.fillText(t.name, 30, 64);
+  x.fillStyle = '#D6D4FF'; x.font = '600 11px ' + sans; x.textBaseline = 'alphabetic';
   x.fillText(s.range.toUpperCase(), 30, 86);
-  x.strokeStyle = '#8A6B3E'; x.globalAlpha = .6; x.lineWidth = 1;
+  x.strokeStyle = '#C6F432'; x.globalAlpha = 1; x.lineWidth = 2; x.lineWidth = 1;
   x.beginPath(); x.moveTo(30, 108); x.lineTo(W-30, 108); x.stroke(); x.globalAlpha = 1;
   const stats = [[String(s.days), '天'], [String(t.expenses.length), '笔支出'], [String((t.stops || []).length), '行程']];
   x.textAlign = 'center';
   stats.forEach(([n, lb], i) => {
     const cx = 30 + (i+.5)*((W-60)/3);
-    x.fillStyle = '#fff'; x.font = 'italic 700 22px ' + serif; x.fillText(n, cx, 148);
-    x.fillStyle = '#B8A98A'; x.font = '600 9px ' + sans; x.fillText(lb.toUpperCase(), cx, 165);
+    x.fillStyle = '#fff'; x.font = '800 22px ' + serif; x.fillText(n, cx, 148);
+    x.fillStyle = '#D6D4FF'; x.font = '600 9px ' + sans; x.fillText(lb.toUpperCase(), cx, 165);
   });
-  x.fillStyle = '#B8A98A'; x.font = '600 10px ' + sans; x.fillText('总花费', W/2, 200);
-  x.fillStyle = '#fff'; x.font = 'italic 700 20px ' + serif; x.fillText(`${t.currency} ${fmt(s.total)}`, W/2, 224);
+  x.fillStyle = '#D6D4FF'; x.font = '600 10px ' + sans; x.fillText('总花费', W/2, 200);
+  x.fillStyle = '#fff'; x.font = '800 20px ' + serif; x.fillText(`${t.currency} ${fmt(s.total)}`, W/2, 224);
   x.textAlign = 'left';
   s.facts.forEach((f, i) => {
     const y = 262 + i*40;
-    x.fillStyle = '#8A6B3E'; x.fillRect(30, y-11, 1.5, 26);
-    x.fillStyle = '#E3DCC8'; x.font = '500 12px ' + sans; x.fillText(f, 40, y+3);
+    x.fillStyle = '#C6F432'; x.fillRect(30, y-11, 1.5, 26);
+    x.fillStyle = '#FFFFFF'; x.font = '500 12px ' + sans; x.fillText(f, 40, y+3);
   });
   if (s.settled) {
     x.strokeStyle = 'rgba(255,255,255,.15)'; x.lineWidth = 1;
     x.beginPath(); x.moveTo(30, H-46); x.lineTo(W-30, H-46); x.stroke();
-    x.fillStyle = '#8A6B3E'; x.font = '600 10px ' + sans; x.textAlign = 'right';
+    x.fillStyle = '#C6F432'; x.font = '600 10px ' + sans; x.textAlign = 'right';
     x.fillText('已 结 清', W-30, H-26); x.textAlign = 'left';
   }
-  x.fillStyle = '#6B6455'; x.font = '500 9px ' + sans; x.textAlign = 'center';
+  x.fillStyle = '#B9B6FF'; x.font = '500 9px ' + sans; x.textAlign = 'center';
   x.fillText('旅行分账', W/2, H-16); x.textAlign = 'left';
 }
 function saveRecap() {
