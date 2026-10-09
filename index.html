@@ -232,6 +232,15 @@
   .trip-row .t-total { display:block; font-size:28px; font-weight:800; letter-spacing:-.02em; margin-top:10px; }
   .trip-row .t-meta { font-size:12.5px; color:var(--sub); margin-top:6px; font-weight:600; }
 
+  .wallet-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .wallet { background:var(--surface); border-radius:20px; padding:14px 16px; box-shadow:var(--shadow); }
+  .w-name { font-size:13px; font-weight:800; color:var(--sub); }
+  .w-amt { font-size:21px; font-weight:800; letter-spacing:-.02em; margin-top:6px; }
+  .w-amt.neg { color:var(--neg-ink); }
+  .fund-card { background:var(--lime-soft); }
+  .fund-card .eb { display:flex; align-items:center; gap:4px; }
+  .fund-bar { height:10px; background:var(--surface); border-radius:99px; overflow:hidden; margin:14px 0; }
+  .fund-bar i { display:block; height:100%; background:var(--brand); border-radius:99px; min-width:0; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   @media print {
     body { background:#fff; color:#000; }
@@ -268,7 +277,7 @@ const fmt  = c => (c/100).toFixed(2);
 const mname = (t,id) => (t.members.find(m => m.id === id) || {name:'?'}).name;
 const CATS = ['餐饮','住宿','交通','门票','购物','其他'];
 const CURS = ['MYR','JPY','USD','CNY','SGD'];
-const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements', exchange:'exchanges', todo:'todos' };
+const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements', exchange:'exchanges', todo:'todos', fund:'fundIn' };
 
 function mainPayer(e, memberSet) {
   let best = null;
@@ -302,6 +311,9 @@ function computeBalances(t) {
     for (const [id, c] of Object.entries(e.payers)) if (id in bal) bal[id] += c;
     for (const [id, c] of Object.entries(shares)) bal[id] -= c;
   }
+  // 存入共同基金 = 存入者先把钱交给保管人:存入者多收回、保管人多欠
+  if (t.fundHolder && t.fundHolder in bal)
+    for (const c of (t.fundIn || [])) if (c.by in bal) { bal[c.by] += c.mainCents; bal[t.fundHolder] -= c.mainCents; }
   for (const s of (t.settlements || [])) { bal[s.from] += s.cents; bal[s.to] -= s.cents; }
   return bal;
 }
@@ -404,19 +416,34 @@ function avgRate(t, cur) {
 }
 // 现金汇率按「先换先花」:最早换的那批外币先被花掉,每笔账的汇率 = 它实际花掉的那几批的加权汇率。
 // extra 是一笔还没存的(或正在改的)假想支出,用来在记账表单里实时给出建议汇率。
+function payerOf(e) {
+  if (e.fromFund) return 'fund';
+  const ids = Object.keys(e.payers || {});
+  return ids.length ? ids.reduce((a, b) => e.payers[b] > e.payers[a] ? b : a) : '';
+}
 function fifoRates(t, cur, extra) {
-  const batches = (t.exchanges || []).filter(x => x.toCur === cur).sort((a, b) => a.date.localeCompare(b.date))
-    .map(x => ({ date: x.date, left: x.toAmount, rate: x.fromCents / 100 / x.toAmount }));
-  if (!batches.length) return {};
+  const all = (t.exchanges || []).filter(x => x.toCur === cur).sort((a, b) => a.date.localeCompare(b.date))
+    .map(x => ({ owner: x.by || '', date: x.date, left: x.toAmount, rate: x.fromCents / 100 / x.toAmount }));
+  if (!all.length) return {};
   const avg = avgRate(t, cur);
-  const list = t.expenses.filter(e => e.currency === cur && (e.pay || 'cash') === 'cash' && !(extra && e.id === extra.id));
-  if (extra) list.push(extra);
+  // 每个人花自己换的钱;自己没换过就用没记名的,再不行用大家的
+  const pick = (owner, date) => {
+    const mine = all.filter(b => b.owner === owner), legacy = all.filter(b => !b.owner);
+    const pool = mine.length ? mine : legacy.length ? legacy : all;
+    return pool.find(b => b.left > 1e-9 && b.date <= date) || pool.find(b => b.left > 1e-9);
+  };
+  const list = t.expenses.filter(e => e.currency === cur && (e.pay || 'cash') === 'cash' && !(extra && e.id === extra.id))
+    .map(e => ({ id: e.id, date: e.date, amount: e.amount, createdAt: e.createdAt, owner: payerOf(e) }));
+  // 存入基金的外币现金,同样是从存入者手上花掉的
+  (t.fundIn || []).filter(c => c.currency === cur && c.currency !== t.currency && !(extra && c.id === extra.id))
+    .forEach(c => list.push({ id: c.id, date: c.date, amount: c.amount, createdAt: c.createdAt, owner: c.by }));
+  if (extra) list.push({ ...extra, owner: extra.owner || '' });
   list.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '~').localeCompare(b.createdAt || '~'));
   const out = {};
   for (const e of list) {
     let need = e.amount, cost = 0;
     while (need > 1e-9) {
-      const b = batches.find(b => b.left > 1e-9 && b.date <= e.date) || batches.find(b => b.left > 1e-9);
+      const b = pick(e.owner, e.date);
       if (!b) { cost += need * avg; break; }
       const take = Math.min(need, b.left);
       cost += take * b.rate; b.left -= take; need -= take;
@@ -425,16 +452,39 @@ function fifoRates(t, cur, extra) {
   }
   return out;
 }
+// 现在每个人(和共同基金)手上各有多少外币现金:自己换的 − 花掉的现金 − 存进基金的
+function cashHoldings(t) {
+  const h = {}, main = t.currency;
+  const add = (o, c, v) => { h[o] = h[o] || {}; h[o][c] = (h[o][c] || 0) + v; };
+  for (const x of (t.exchanges || [])) {
+    add(x.by || '', x.toCur, x.toAmount);
+    if (x.by === 'fund') add('fund', main, -x.fromCents / 100);
+  }
+  for (const c of (t.fundIn || [])) {
+    add('fund', c.currency, c.amount);
+    if (c.currency !== main) add(c.by, c.currency, -c.amount);
+  }
+  for (const e of t.expenses) {
+    if ((e.pay || 'cash') !== 'cash') continue;
+    if (e.fromFund) { add('fund', e.currency, -e.amount); continue; }
+    if (e.currency === main) continue;
+    for (const [id, cents] of Object.entries(e.payers)) add(id, e.currency, -(cents / 100 / e.rate));
+  }
+  for (const o of Object.keys(h)) for (const c of Object.keys(h[o])) h[o][c] = Math.round(h[o][c] * 100) / 100;
+  return h;
+}
 // 建议汇率:现金 → 按换汇汇率;刷卡/没有换汇记录 → 沿用上次
-function suggestRateFor(t, cur, date, amount, editId, pay) {
+function suggestRateFor(t, cur, date, amount, editId, pay, owner) {
   if (pay === 'cash') {
     const id = editId || '__new', old = editId ? t.expenses.find(x => x.id === editId) : null;
-    const r = fifoRates(t, cur, { id, date, amount: Math.max(amount || 0, 1e-6), createdAt: old ? old.createdAt : undefined })[id];
+    const r = fifoRates(t, cur, { id, date, amount: Math.max(amount || 0, 1e-6), createdAt: old ? old.createdAt : undefined, owner })[id];
     if (r > 0) return { r: +r.toPrecision(6), src: 'fx' };
   }
   const last = t.last && t.last.currency === cur ? t.last.rate : null;
   return last > 0 ? { r: last, src: 'last' } : null;
 }
+const nf = n => (+Number(n).toFixed(2)).toLocaleString('en-US');
+const fundLeftCents = t => (t.fundIn || []).reduce((s, c) => s + c.mainCents, 0) - t.expenses.filter(e => e.fromFund).reduce((s, e) => s + e.mainCents, 0);
 // 换汇率重新定价:总额、各付款人垫付额按新汇率重算,余数由金额最大的付款人吸收
 function repriceExpense(e, rate) {
   const mainCents = Math.round(e.amount * rate * 100);
@@ -547,6 +597,23 @@ function repriceExpense(e, rate) {
   const dts = ['2026-10-12', '2026-10-14'];
   console.assert(tripStatus(dts, '2026-10-10') === '距出发还有 2 天' && tripStatus(dts, '2026-10-13') === '旅途第 2 天 / 共 3 天'
     && tripStatus(dts, '2026-10-20') === '行程已结束' && tripStatus([], '2026-10-10') === '', '行程状态算错');
+  // 每人各花各的换汇汇率:A 的钱 0.03,B 的钱 0.04
+  const to = { currency:'MYR', exchanges:[{by:'A', date:'2026-10-12', toCur:'JPY', fromCents:3000, toAmount:1000},{by:'B', date:'2026-10-12', toCur:'JPY', fromCents:4000, toAmount:1000}],
+    expenses:[{id:'a', date:'2026-10-13', currency:'JPY', amount:500, payers:{A:1500}},{id:'b', date:'2026-10-13', currency:'JPY', amount:500, payers:{B:2000}}] };
+  const fo = fifoRates(to, 'JPY');
+  console.assert(Math.abs(fo.a - 0.03) < 1e-9 && Math.abs(fo.b - 0.04) < 1e-9, '按人分账的换汇汇率算错', fo);
+  // 谁手上有多少现金 + 共同基金
+  const th = { currency:'MYR', exchanges:[{by:'A', toCur:'JPY', toAmount:30000, fromCents:100000},{by:'fund', toCur:'JPY', toAmount:10000, fromCents:33000}],
+    fundIn:[{by:'B', amount:500, currency:'MYR', mainCents:50000},{by:'A', amount:5000, currency:'JPY', mainCents:16500}],
+    expenses:[{currency:'JPY', amount:2000, rate:0.033, pay:'cash', payers:{A:6600}},
+      {currency:'JPY', amount:3000, rate:0.033, pay:'cash', fromFund:true, payers:{H:9900}},
+      {currency:'JPY', amount:1000, rate:0.033, pay:'card', payers:{A:3300}}] };
+  const hh = cashHoldings(th);
+  console.assert(hh.A.JPY === 23000 && hh.fund.JPY === 12000 && hh.fund.MYR === 170 && !hh.B, '现金账算错', hh);
+  // 共同基金:B 存 100.00,保管人 A,公款付 30.00 由 A、B 平分 → 对账仍平衡
+  const bf = computeBalances({ members:[{id:'A'},{id:'B'}], settlements:[], fundHolder:'A', fundIn:[{by:'B', mainCents:10000}],
+    expenses:[{ payers:{A:3000}, participantIds:['A','B'], mainCents:3000, rate:1, fromFund:true, split:{type:'equal'} }] });
+  console.assert(bf.B === 8500 && bf.A === -8500 && bf.A + bf.B === 0, '共同基金余额算错', bf);
   // 清单作为独立记录同步
   const rt = tripToRecords({ id:'T', name:'n', currency:'MYR', members:[], expenses:[], stops:[], settlements:[], todos:[{id:'d1', text:'护照', done:false}] });
   console.assert(rt.length === 2 && rt[1].kind === 'todo' && applyRemote({ todos:[] }, { id:'d1', kind:'todo', data:{id:'d1', text:'x'} }), '清单同步算错', rt);
@@ -565,9 +632,9 @@ let sync = JSON.parse(localStorage.getItem(SS) || '{"outbox":[],"snap":{},"lastP
 const saveSync = () => localStorage.setItem(SS, JSON.stringify(sync));
 
 function tripToRecords(t) {
-  const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency } }];
+  const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency, fundHolder:t.fundHolder || '' } }];
   const add = (kind, list) => (list || []).forEach(x => recs.push({ id:x.id, kind, data:x }));
-  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges); add('todo', t.todos);
+  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges); add('todo', t.todos); add('fund', t.fundIn);
   return recs;
 }
 function diffRecords(snap, t) {
@@ -581,8 +648,8 @@ function diffRecords(snap, t) {
 }
 function applyRemote(t, rec) {
   if (rec.kind === 'trip') {
-    if (rec.deleted || (t.name === rec.data.name && t.currency === rec.data.currency)) return false;
-    t.name = rec.data.name; t.currency = rec.data.currency;
+    if (rec.deleted || (t.name === rec.data.name && t.currency === rec.data.currency && (t.fundHolder || '') === (rec.data.fundHolder || ''))) return false;
+    t.name = rec.data.name; t.currency = rec.data.currency; t.fundHolder = rec.data.fundHolder || '';
     return true;
   }
   if (rec.deleted) {
@@ -739,7 +806,7 @@ function tripCsv(t) {
   const head = ['日期','备注','类别','原币金额','货币','汇率',`主币金额(${t.currency})`,'付款人','参与人','地点'];
   const rows = [...t.expenses].sort((a,b) => a.date.localeCompare(b.date)).map(e => [
     e.date, e.desc, e.cat, e.amount, e.currency, e.rate, fmt(e.mainCents),
-    Object.entries(e.payers).map(([id,c]) => `${mname(t,id)} ${fmt(c)}`).join('；'),
+    e.fromFund ? `公款 ${fmt(e.mainCents)}` : Object.entries(e.payers).map(([id,c]) => `${mname(t,id)} ${fmt(c)}`).join('；'),
     e.participantIds.map(id => mname(t,id)).join('、'),
     e.stopId ? (((t.stops || []).find(s => s.id === e.stopId)) || {name:''}).name : ''
   ]);
@@ -870,7 +937,9 @@ function addExpense(ev) {
   const cur = f.cur.value.toUpperCase().replace(/[^A-Z0-9]/g, '') || t.currency;
   const rate = cur === t.currency ? 1 : parseFloat(f.rate.value);
   const participantIds = [...f.querySelectorAll('input[name=pt]:checked')].map(x => x.value);
-  const payerIds = [...f.querySelectorAll('input[name=py]:checked')].map(x => x.value);
+  const fromFund = !!(f.fund && f.fund.checked);
+  if (fromFund && !t.fundHolder) { alert('还没设置共同基金的保管人'); return; }
+  const payerIds = fromFund ? [t.fundHolder] : [...f.querySelectorAll('input[name=py]:checked')].map(x => x.value);
   if (!(amount > 0)) { alert('金额要大于 0'); return; }
   if (!(rate > 0))   { alert('汇率要大于 0'); return; }
   if (!participantIds.length) { alert('至少选一个参与人'); return; }
@@ -896,11 +965,11 @@ function addExpense(ev) {
   }
   const rec = { id: view.editId || uid(), desc: f.desc.value.trim() || f.cat.value, cat: f.cat.value, date: f.date.value,
     amount, currency: cur, rate, mainCents,
-    payers, participantIds, split, stopId: f.stop.value || null, pay: f.pay.value };
+    payers, participantIds, split, stopId: f.stop.value || null, pay: fromFund ? 'cash' : f.pay.value, fromFund };
   const i = t.expenses.findIndex(x => x.id === rec.id);
   if (i >= 0) { rec.createdAt = t.expenses[i].createdAt; rec.editedAt = new Date().toISOString(); t.expenses[i] = rec; }
   else { rec.createdAt = new Date().toISOString(); t.expenses.push(rec); }
-  if (i < 0) t.last = { payerId: payerIds[0], currency: cur, rate, cat: rec.cat, pay: rec.pay };
+  if (i < 0) t.last = { payerId: fromFund ? (t.last || {}).payerId : payerIds[0], currency: cur, rate, cat: rec.cat, pay: rec.pay, fromFund };
   save(); view.showForm = false; view.presetStopId = ''; view.editId = ''; view.dupId = ''; render();
 }
 function payerToggle(f) {
@@ -987,7 +1056,7 @@ function addExchange(ev) {
   if (!(pay > 0) || !(got > 0)) { alert('付出和换得的金额都要大于 0'); return; }
   if (!cur || cur === t.currency) { alert(`换入货币要和主货币 ${t.currency} 不同`); return; }
   t.exchanges = t.exchanges || [];
-  const rec = { id: view.editFxId || uid(), date: f.fdate.value, fromCents: Math.round(pay * 100), toCur: cur, toAmount: got, note: f.fnote.value.trim() };
+  const rec = { id: view.editFxId || uid(), by: f.fby.value, date: f.fdate.value, fromCents: Math.round(pay * 100), toCur: cur, toAmount: got, note: f.fnote.value.trim() };
   const i = t.exchanges.findIndex(x => x.id === rec.id);
   if (i >= 0) t.exchanges[i] = rec; else t.exchanges.push(rec);
   view.showFxForm = false; view.editFxId = ''; save(); render();
@@ -1015,13 +1084,15 @@ function refreshRate(f, force) {
   if (!c || c === f.dataset.main) return;
   if (f.rate.dataset.manual && !force) return;
   if (force) f.rate.dataset.manual = '';
-  const hit = suggestRateFor(trip(), c, f.date.value, parseFloat(f.amount.value) || 0, view.editId, f.pay.value);
+  const owner = (f.fund && f.fund.checked) ? 'fund' : ((f.querySelector('input[name=py]:checked') || {}).value || '');
+  const hit = suggestRateFor(trip(), c, f.date.value, parseFloat(f.amount.value) || 0, view.editId, f.pay.value, owner);
   f.rate.value = hit ? hit.r : '';
   f.querySelector('.hint').textContent = hit ? (hit.src === 'fx' ? '按你换汇时的汇率（先换先花），可改' : '沿用上次，可改') : '没有换汇记录，请手填';
 }
 function memberRefs(t, id) {
   return t.expenses.filter(e => e.payerId === id || (e.payers && id in e.payers) || e.participantIds.includes(id)).length
-    + (t.settlements || []).filter(s => s.from === id || s.to === id).length;
+    + (t.settlements || []).filter(s => s.from === id || s.to === id).length
+    + (t.fundIn || []).filter(c => c.by === id).length + (t.exchanges || []).filter(x => x.by === id).length + (t.fundHolder === id ? 1 : 0);
 }
 function delMemberSafe(t, id) {
   if (memberRefs(t, id)) return false;
@@ -1075,7 +1146,7 @@ function render() {
 function goScreen(s) { view = { screen:s }; render(); }
 function bottomBar() {
   const items = view.screen === 'trip'
-    ? [['plan','🗓','计划'],['ledger','🧾','流水'],['fx','💱','换汇'],['settle','🤝','对账']].map(([k, ic, l]) =>
+    ? [['plan','🗓','计划'],['ledger','🧾','流水'],['fx','👛','钱包'],['settle','🤝','对账']].map(([k, ic, l]) =>
         `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')"><span class="ic">${ic}</span>${l}</button>`)
     : [['list','🧳','行程'],['backup','💾','备份']].map(([k, ic, l]) =>
         `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')"><span class="ic">${ic}</span>${l}</button>`);
@@ -1275,8 +1346,131 @@ function photoOverlay(t) {
 }
 
 function renderFx(t) {
+  return `${renderWallets(t)}${renderFund(t)}<div style="margin-top:34px">${renderFxLog(t)}</div>`;
+}
+function renderWallets(t) {
+  const h = cashHoldings(t), me = sync.me[t.id];
+  const rowsOf = o => Object.entries(h[o] || {}).filter(([c, v]) => Math.abs(v) >= .005 && !(o === 'fund'));
+  const owners = [...t.members.map(m => m.id).sort((a, b) => (b === me) - (a === me)), ''].filter(o => rowsOf(o).length);
+  const nm = o => o === '' ? '未指定' : esc(mname(t, o)) + (o === me ? '（我）' : '');
+  const neg = owners.some(o => rowsOf(o).some(([, v]) => v < 0));
+  return `
+  <h2 style="margin-top:6px">现金账</h2>
+  <p class="muted" style="margin-bottom:12px">每个人手上还有多少外币现金：自己换的，减去记账花掉的现金和存进基金的。刷卡不算。</p>
+  ${owners.length ? `<div class="wallet-grid">${owners.map(o => `
+    <div class="wallet"><div class="w-name">${nm(o)}</div>
+      ${rowsOf(o).map(([c, v]) => `<div class="w-amt num ${v < 0 ? 'neg' : ''}">${esc(c)} ${nf(v)}</div>`).join('')}</div>`).join('')}</div>
+    ${owners.includes('') ? '<p class="muted" style="margin-top:10px">「未指定」是没记是谁换的钱，在下面历次换汇里点「改」补上是谁换的，现金账才准。</p>' : ''}
+    ${neg ? '<p class="muted" style="margin-top:6px">出现红色负数，说明记账花掉的现金比换进来的多，可能漏记了一次换汇。</p>' : ''}`
+  : '<p class="muted">还没有换汇记录。在下面「记一次换汇」，选好是谁换的，这里就会显示每个人手上有多少外币。</p>'}`;
+}
+function renderFund(t) {
+  if (!t.members.length) return '';
+  const fi = [...(t.fundIn || [])].sort((a, b) => b.date.localeCompare(a.date));
+  const fe = t.expenses.filter(e => e.fromFund).sort((a, b) => b.date.localeCompare(a.date));
+  const inC = fi.reduce((s, c) => s + c.mainCents, 0), usedC = fe.reduce((s, e) => s + e.mainCents, 0);
+  const pct = inC > 0 ? Math.min(100, Math.round(usedC / inC * 100)) : 0;
+  const pool = Object.entries(cashHoldings(t).fund || {}).filter(([, v]) => Math.abs(v) >= .005);
+  const today = new Date().toISOString().slice(0, 10);
+  if (!t.fundHolder) return `
+  <h2>共同基金</h2>
+  <div class="surface">
+    <div class="eb">大家出钱放一起，公共开销从这里扣</div>
+    <p class="muted" style="margin-top:6px">先选一个人来保管这笔钱。之后记账时勾选「从共同基金出」，就记在基金名下，并统计用了多少、还剩多少。</p>
+    <label>保管人</label>
+    <select id="fund-holder">${t.members.map(m => `<option value="${m.id}" ${m.id === sync.me[t.id] ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
+    <button class="cta" style="margin-top:16px" onclick="setFundHolder(document.getElementById('fund-holder').value)">开启共同基金</button>
+  </div>`;
+  const known = [...new Set([t.currency, ...(t.exchanges || []).map(x => x.toCur), ...CURS])].slice(0, 6);
+  const canChange = !fi.length && !fe.length;
+  const row = (icon, title, sub, amt, orig, del) => `<div class="exp-row"><div class="exp-ic">${icon}</div>
+    <div style="flex:1;min-width:0"><div style="font-weight:700">${title}</div><div class="who">${sub}</div></div>
+    <div class="amt-r"><div class="main num">${esc(t.currency)} ${amt}</div>${orig ? `<div class="orig">${orig}</div>` : ''}</div>${del}</div>`;
+  return `
+  <h2>共同基金</h2>
+  <div class="surface fund-card">
+    <div class="eb">${esc(mname(t, t.fundHolder))} 保管${canChange ? ' · <button class="icon-btn" onclick="changeFundHolder()">换人</button>' : ''}</div>
+    <div class="s2-title num">${esc(t.currency)} ${fmt(inC - usedC)}</div>
+    <div class="muted">剩余 · 已存入 ${fmt(inC)} · 已用 ${fmt(usedC)}${inC ? `（${pct}%）` : ''}</div>
+    <div class="fund-bar"><i style="width:${pct}%"></i></div>
+    ${pool.length ? `<div class="muted" style="margin-bottom:12px">基金手上的现金：${pool.map(([c, v]) => `${esc(c)} ${nf(v)}`).join(' · ')}</div>` : ''}
+    <button class="cta" onclick="toggleFundForm()">${view.showFundForm ? '收起' : '＋ 存入基金'}</button>
+  </div>
+  ${view.showFundForm ? `
+  <form class="surface" id="fund-form" onsubmit="addFund(event)" data-main="${esc(t.currency)}">
+    <div class="eb">存入基金</div>
+    <label>谁存的</label>
+    <select name="cby" onchange="refreshFundRate(this.form)">${t.members.map(m => `<option value="${m.id}" ${m.id === sync.me[t.id] ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
+    <div class="row">
+      <div><label>金额</label><input name="camt" type="number" step="any" min="0" inputmode="decimal" oninput="refreshFundRate(this.form)" required autofocus></div>
+      <div style="flex:0 0 84px"><label>货币</label><input name="ccur" value="${esc(t.currency)}" maxlength="5" oninput="setFundCur(this.form, this.value)"></div>
+    </div>
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">${known.map(c =>
+      `<button type="button" class="chip cur-chip ${c === t.currency ? 'on' : ''}" data-c="${esc(c)}" onclick="setFundCur(this.form,'${esc(c)}')">${esc(c)}</button>`).join('')}</div>
+    <div class="rate-row" style="display:none">
+      <label>汇率 1 外币 = ? ${esc(t.currency)}</label><input name="crate" type="number" step="any" min="0" inputmode="decimal" oninput="this.dataset.manual='1'">
+      <div class="hint"></div>
+    </div>
+    <label>日期</label><input name="cdate" type="date" value="${today}" onchange="refreshFundRate(this.form)" required>
+    <label>备注(可选)</label><input name="cnote" placeholder="如 出发前每人先存 200">
+    <button class="cta" style="margin-top:16px">保存</button>
+  </form>` : ''}
+  ${fi.length ? `<div class="date-h">存入记录</div>${fi.map(c => row('💰', esc(mname(t, c.by)) + ' 存入', `${c.date}${c.note ? ' · ' + esc(c.note) : ''}`, fmt(c.mainCents),
+      c.currency !== t.currency ? `${esc(c.currency)} ${nf(c.amount)}` : '', `<button class="icon-btn" onclick="delFund('${c.id}')">×</button>`)).join('')}` : ''}
+  ${fe.length ? `<div class="date-h">公款用在哪了 · 共 ${fe.length} 笔 · ${esc(t.currency)} ${fmt(usedC)}</div>${fe.map(e => row(CATICON[e.cat] || '🧾', esc(e.desc), `${e.date}`, fmt(e.mainCents),
+      e.currency !== t.currency ? `${esc(e.currency)} ${nf(e.amount)}` : '', `<button class="icon-btn" onclick="openEditExpense('${e.id}')">改</button>`)).join('')}`
+    : '<p class="muted" style="margin-top:10px">还没有公款支出。记账时勾选「从共同基金出」即可。</p>'}`;
+}
+function fundToggle(f) {
+  f.querySelector('.payer-box').style.display = f.fund.checked ? 'none' : '';
+  refreshRate(f);
+}
+function toggleFundForm() { view.showFundForm = !view.showFundForm; render(); if (view.showFundForm) scrollToId('fund-form'); }
+function setFundHolder(id) { if (!id) return; trip().fundHolder = id; save(); render(); }
+function changeFundHolder() {
+  const t = trip();
+  if ((t.fundIn || []).length || t.expenses.some(e => e.fromFund)) { alert('基金已经有记录，不能换保管人'); return; }
+  t.fundHolder = ''; save(); render();
+}
+function setFundCur(f, c) {
+  c = c.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (f.ccur.value !== c) f.ccur.value = c;
+  f.querySelectorAll('.cur-chip').forEach(b => b.classList.toggle('on', b.dataset.c === c));
+  const foreign = c && c !== f.dataset.main;
+  f.querySelector('.rate-row').style.display = foreign ? '' : 'none';
+  if (foreign) { f.crate.dataset.manual = ''; refreshFundRate(f, true); }
+}
+function refreshFundRate(f, force) {
+  const c = f.ccur.value;
+  if (!c || c === f.dataset.main) return;
+  if (f.crate.dataset.manual && !force) return;
+  const hit = suggestRateFor(trip(), c, f.cdate.value, parseFloat(f.camt.value) || 0, '', 'cash', f.cby.value);
+  f.crate.value = hit ? hit.r : '';
+  f.querySelector('.hint').textContent = hit ? '按这个人换汇时的汇率，可改' : '没有换汇记录，请手填';
+}
+function addFund(ev) {
+  ev.preventDefault();
+  const t = trip(), f = ev.target;
+  const amount = parseFloat(f.camt.value);
+  const cur = f.ccur.value.toUpperCase().replace(/[^A-Z0-9]/g, '') || t.currency;
+  const rate = cur === t.currency ? 1 : parseFloat(f.crate.value);
+  if (!(amount > 0)) { alert('金额要大于 0'); return; }
+  if (!(rate > 0)) { alert('汇率要大于 0'); return; }
+  (t.fundIn = t.fundIn || []).push({ id: uid(), date: f.cdate.value, by: f.cby.value, amount, currency: cur, rate,
+    mainCents: Math.round(amount * rate * 100), note: f.cnote.value.trim(), createdAt: new Date().toISOString() });
+  view.showFundForm = false; save(); render();
+}
+function delFund(id) {
+  if (!confirm('删除这条存入记录？')) return;
+  const t = trip(); t.fundIn = (t.fundIn || []).filter(c => c.id !== id); save(); render();
+}
+function renderFxLog(t) {
   const ex = [...(t.exchanges || [])].sort((a, b) => b.date.localeCompare(a.date));
   const xe = view.editFxId ? ex.find(x => x.id === view.editFxId) : null;
+  const defBy = [sync.me[t.id], (ex[0] || {}).by, (t.members[0] || {}).id].find(id => id && (id === 'fund' ? t.fundHolder : t.members.some(m => m.id === id)));
+  const curBy = xe ? xe.by : defBy;
+  const byOpts = `${xe && !xe.by ? '<option value="" selected>未指定</option>' : ''}${t.members.map(m =>
+    `<option value="${m.id}" ${curBy === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}${t.fundHolder ? `<option value="fund" ${curBy === 'fund' ? 'selected' : ''}>💰 共同基金</option>` : ''}`;
   const curs = [...new Set(ex.map(x => x.toCur))];
   const today = new Date().toISOString().slice(0, 10);
   const known = [...new Set([...curs, ...t.expenses.map(e => e.currency), ...CURS])].filter(c => c !== t.currency).slice(0, 5);
@@ -1294,7 +1488,7 @@ function renderFx(t) {
         ${lr('累计付出', `${t.currency} ${fmt(paid)}`)}
         ${lr('累计换入', `${c} ${+got.toFixed(2)}`)}
         ${lr('现金已花', `${c} ${spent}`)}
-        ${lr('约剩现金', `${c} ${+(got - spent).toFixed(2)}`)}
+        ${lr('全员约剩现金', `${c} ${+(got - spent).toFixed(2)}`)}
       </div>
       <div class="muted" style="font-size:12px;margin-top:6px">约剩 = 换入 − 记为「现金」的花费；刷卡 / 转账的不计入，仅供参考。新记的现金支出按「先换先花」取你换汇时的汇率。</div>
       ${off ? `<div style="margin-top:12px;font-weight:700;font-size:14px">有 ${off} 笔现金支出的汇率和你换汇时的不一致</div>
@@ -1310,6 +1504,7 @@ function renderFx(t) {
   ${view.showFxForm ? `
   <form class="surface" id="fx-form" onsubmit="addExchange(event)" data-main="${esc(t.currency)}" style="margin-top:12px">
     <div class="eb">${xe ? '修改换汇' : '什么时候换的钱'}</div>
+    <label>谁换的</label><select name="fby">${byOpts}</select>
     <label>哪天换的(就选当时那天)</label><input name="fdate" type="date" value="${xe ? xe.date : today}" required>
     <div class="row">
       <div><label>付出 ${esc(t.currency)}</label><input name="fpay" type="number" step="any" min="0" inputmode="decimal" value="${xe ? xe.fromCents / 100 : ''}" oninput="fxPreview(this.form)" required autofocus></div>
@@ -1327,7 +1522,7 @@ function renderFx(t) {
     <div class="exp-row">
       <div style="flex:1">
         <div style="font-weight:600" class="num">${t.currency} ${fmt(x.fromCents)} → ${esc(x.toCur)} ${x.toAmount}</div>
-        <div class="who">${x.date} · 1 ${esc(x.toCur)} = ${fmtRate(x.fromCents / 100 / x.toAmount)} ${esc(t.currency)}${x.note ? ' · ' + esc(x.note) : ''}</div>
+        <div class="who">${esc(x.by === 'fund' ? '共同基金' : x.by ? mname(t, x.by) : '未指定')} · ${x.date} · 1 ${esc(x.toCur)} = ${fmtRate(x.fromCents / 100 / x.toAmount)} ${esc(t.currency)}${x.note ? ' · ' + esc(x.note) : ''}</div>
       </div>
       <button class="icon-btn" onclick="openEditFx('${x.id}')">改</button>
       <button class="icon-btn" onclick="delExchange('${x.id}')">×</button>
@@ -1368,7 +1563,7 @@ function renderLedger(t) {
         <div class="exp-ic">${CATICON[e.cat] || '🧾'}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:700">${esc(e.desc)}</div>
-          <div class="who">${Object.keys(e.payers).map(id => esc(mname(t, id))).join('、')} 付 · ${e.participantIds.length === t.members.length ? '全员' : e.participantIds.map(id => esc(mname(t,id))).join('、')}分摊${e.stopId ? ' · ' + esc(((t.stops || []).find(s => s.id === e.stopId) || {name:'?'}).name) : ''}${e.editedAt ? ` · 编辑于 ${e.editedAt.slice(0,10)}` : ''}</div>
+          <div class="who">${e.fromFund ? '💰 公款' : Object.keys(e.payers).map(id => esc(mname(t, id))).join('、')} 付 · ${e.participantIds.length === t.members.length ? '全员' : e.participantIds.map(id => esc(mname(t,id))).join('、')}分摊${e.stopId ? ' · ' + esc(((t.stops || []).find(s => s.id === e.stopId) || {name:'?'}).name) : ''}${e.editedAt ? ` · 编辑于 ${e.editedAt.slice(0,10)}` : ''}</div>
         </div>
         <div class="amt-r">
           <div class="main num">${t.currency} ${fmt(e.mainCents)}</div>
@@ -1398,12 +1593,13 @@ function expenseForm(t) {
   const cat0 = [e && e.cat, last.cat].find(c => CATS.includes(c)) || CATS[0];
   const date0 = isEdit ? e.date : today;
   const pay0 = e ? (e.pay || 'cash') : (last.pay || 'cash');
-  const sug0 = !isEdit && foreign0 ? suggestRateFor(t, cur0, today, 0, '', pay0) : null;
+  const fund0 = !!(t.fundHolder && (e ? e.fromFund : last.fromFund));
+  const sug0 = !isEdit && foreign0 ? suggestRateFor(t, cur0, today, 0, '', pay0, fund0 ? 'fund' : Object.keys(payers0)[0]) : null;
   const rate0 = isEdit ? e.rate : (sug0 ? sug0.r : '');
   const hint0 = isEdit ? '已锁定为记账时的汇率；想改成换汇汇率，点下面「用我的换汇汇率」' : !foreign0 ? '' : sug0 ? (sug0.src === 'fx' ? '按你换汇时的汇率（先换先花），可改' : '沿用上次，可改') : '没有换汇记录，请手填';
   const sp = (e && e.split) || { type:'equal' };
   const svStyle = sp.type === 'equal' ? 'display:none' : '';
-  const dflt = isEdit ? '' : `（${esc(mname(t, Object.keys(payers0)[0]))} 付 · 全员平分 · 今天）`;
+  const dflt = isEdit ? '' : `（${fund0 ? '公款' : esc(mname(t, Object.keys(payers0)[0]))} 付 · 全员平分 · 今天）`;
   return `<form class="surface" id="expense-form" onsubmit="addExpense(event)" data-main="${esc(t.currency)}">
     <div class="eb">${isEdit ? '编辑支出' : e ? '再记一笔 · 复制自上一笔' : '记一笔'}</div>
     <div class="row" style="align-items:flex-end">
@@ -1420,12 +1616,15 @@ function expenseForm(t) {
     </div>
     <label>类别</label>
     <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${CATICON[c]} ${c}</label>`).join('')}</div>
+    ${t.fundHolder ? `<div class="checks" style="margin-top:14px"><label><input type="checkbox" name="fund" ${fund0 ? 'checked' : ''} onchange="fundToggle(this.form)">💰 从共同基金出 · 剩 ${esc(t.currency)} ${fmt(fundLeftCents(t))}</label></div>` : ''}
     <details class="section" ${isEdit ? 'open' : ''} style="margin-top:18px">
       <summary>更多选项${dflt}</summary>
       <div>
+        <div class="payer-box" style="${fund0 ? 'display:none' : ''}">
         <label>付款人(可多选合付，${esc(t.currency)} 以外按原币填各自付了多少)</label>
         <div class="checks">${t.members.map(m =>
           `<label><input type="checkbox" name="py" value="${m.id}" ${m.id in payers0 ? 'checked' : ''} onchange="payerToggle(this.form)">${esc(m.name)}<input class="sv pv" name="pv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${pv0(m.id)}" style="${multiPay ? '' : 'display:none'}"></label>`).join('')}</div>
+        </div>
         <label>参与人(默认全员)</label>
         <div class="checks">${t.members.map(m =>
           `<label><input type="checkbox" name="pt" value="${m.id}" ${!e || e.participantIds.includes(m.id) ? 'checked' : ''}>${esc(m.name)}<input class="sv" name="sv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${sp.values && sp.values[m.id] != null ? sp.values[m.id] : ''}" style="${svStyle}"></label>`).join('')}</div>
@@ -1466,7 +1665,7 @@ function renderSettle(t) {
   for (const e of t.expenses) {
     const shares = expenseShares(e, ids);
     if (!shares) continue;
-    for (const [id, c] of Object.entries(e.payers)) if (id in paid) paid[id] += c;
+    if (!e.fromFund) for (const [id, c] of Object.entries(e.payers)) if (id in paid) paid[id] += c;
     for (const [id, c] of Object.entries(shares)) spend[id] += c;
   }
   const by = key => { const g = {}; t.expenses.forEach(e => g[key(e)] = (g[key(e)] || 0) + e.mainCents); return Object.entries(g); };
