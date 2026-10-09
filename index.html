@@ -168,6 +168,22 @@
   .recap-stamp { margin-top:20px; text-align:right; font-size:10.5px; letter-spacing:.16em; color:var(--accent);
     text-transform:uppercase; border-top:1px solid rgba(255,255,255,.15); padding-top:12px; }
 
+  .chip { background:none; border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-size:13px;
+    font-weight:500; color:var(--ink); }
+  .chip.on { background:var(--ink); border-color:var(--ink); color:#fff; }
+  .amt-in { font-family:var(--serif); font-size:36px !important; font-weight:700; padding:6px 2px !important; }
+  .cur-in { font-size:18px !important; font-weight:600; text-align:center; }
+  .hint { font-size:12px; color:var(--accent-ink); }
+  .plan-day { display:flex; justify-content:space-between; align-items:baseline; margin:26px 0 4px;
+    padding-bottom:8px; border-bottom:1px solid var(--ink); }
+  .plan-day b { font-family:var(--serif); font-size:19px; }
+  .plan-day span { font-size:11px; letter-spacing:.12em; color:var(--sub); text-transform:uppercase; }
+  .plan-item { display:flex; gap:14px; padding:14px 0; border-bottom:1px solid var(--line); }
+  .plan-item .pt { flex:0 0 46px; font-size:13.5px; font-weight:600; padding-top:3px; }
+  .plan-item .pt.none { color:var(--faint); font-weight:400; }
+  .plan-item .pn { font-family:var(--serif); font-size:17px; font-weight:700; }
+  .plan-item .pm { font-size:12.5px; color:var(--sub); margin-top:3px; line-height:1.6; }
+  .fx-card .s2-title { font-size:21px; }
   .hero { padding:2px 0 26px; }
   .hero h1 { margin-top:8px; }
   .hero p { margin-top:8px; }
@@ -194,7 +210,7 @@ function migrateIds(db) {
 }
 migratePayers(db);
 migrateIds(db);
-let view = { screen:'list', tripId:null, tab:'timeline', showForm:false, presetStopId:'', showStopForm:false, showRecap:false, showNewTrip:false };
+let view = { screen:'list', tripId:null, tab:'plan', showForm:false, presetStopId:'', showStopForm:false, showRecap:false, showNewTrip:false };
 const save = () => { localStorage.setItem(LS, JSON.stringify(db)); pushChanges(trip()); };
 const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 const esc  = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -203,7 +219,7 @@ const fmt  = c => (c/100).toFixed(2);
 const mname = (t,id) => (t.members.find(m => m.id === id) || {name:'?'}).name;
 const CATS = ['餐饮','住宿','交通','门票','购物','其他'];
 const CURS = ['MYR','JPY','USD','CNY','SGD'];
-const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements' };
+const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements', exchange:'exchanges' };
 
 function mainPayer(e, memberSet) {
   let best = null;
@@ -266,6 +282,13 @@ function transferDetail(t, from, to) {
     sum += part;
   }
   return { lines, sum };
+}
+const fmtRate = r => r ? String(+r.toPrecision(5)) : '';
+// 换汇均价:累计付出的主币 ÷ 累计换到的外币 = 1 单位外币值多少主币
+function avgRate(t, cur) {
+  let paid = 0, got = 0;
+  for (const x of (t.exchanges || [])) if (x.toCur === cur) { paid += x.fromCents; got += x.toAmount; }
+  return got > 0 ? paid / 100 / got : null;
 }
 (function selfTest() {
   const t = { members:[{id:'A'},{id:'B'},{id:'C'}], settlements:[], expenses:[
@@ -349,6 +372,9 @@ function transferDetail(t, from, to) {
   detachStop(t5, 's1');
   console.assert(t5.stops.length === 1 && t5.expenses.length === 2 && t5.expenses[0].stopId === null
     && t5.expenses[1].stopId === 's2', '删地点后支出丢了', t5);
+  // 换汇:100.00 MYR→3000 JPY,200.00 MYR→6200 JPY,均价 = 300 / 9200
+  const tx = { exchanges:[{toCur:'JPY', fromCents:10000, toAmount:3000},{toCur:'JPY', fromCents:20000, toAmount:6200}] };
+  console.assert(Math.abs(avgRate(tx, 'JPY') - 300/9200) < 1e-12 && avgRate(tx, 'USD') === null, '换汇均价算错', tx);
 })();
 
 /* ============ V2 多人同步(Supabase) ============ */
@@ -362,7 +388,7 @@ const saveSync = () => localStorage.setItem(SS, JSON.stringify(sync));
 function tripToRecords(t) {
   const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency } }];
   const add = (kind, list) => (list || []).forEach(x => recs.push({ id:x.id, kind, data:x }));
-  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements);
+  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges);
   return recs;
 }
 function diffRecords(snap, t) {
@@ -467,7 +493,7 @@ async function syncTrip(tid) {
   flush();
 }
 function safeRender() { // 表单打开时不重绘,免得吃掉正在输入的内容;数据已落盘,下次操作自然刷新
-  if (view.showForm || view.showStopForm || view.showClaim) return;
+  if (view.showForm || view.showStopForm || view.showFxForm || view.showClaim) return;
   render();
 }
 async function shareTrip() {
@@ -496,11 +522,11 @@ async function joinByCode(code) {
   history.replaceState(null, '', location.pathname);
   if (error || !tid) { alert('邀请码无效'); render(); return; }
   let t = db.trips.find(x => x.id === tid);
-  if (!t) { t = { id: tid, name:'…', currency:'MYR', members:[], expenses:[], settlements:[], stops:[], shareCode: code }; db.trips.unshift(t); }
+  if (!t) { t = { id: tid, name:'…', currency:'MYR', members:[], expenses:[], settlements:[], stops:[], exchanges:[], shareCode: code }; db.trips.unshift(t); }
   t.shareCode = code;
   await pullTrip(tid);
   save();
-  view = { screen:'trip', tripId: tid, tab:'timeline' };
+  view = { screen:'trip', tripId: tid, tab:'plan' };
   if (!sync.me[tid]) view.showClaim = true;
   subscribeTrip(tid);
   render();
@@ -592,9 +618,9 @@ function addTrip(ev) {
   ev.preventDefault();
   const f = ev.target, name = f.name.value.trim(), cur = f.cur.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!name || !cur) return;
-  const t = { id: uid(), name, currency: cur, members: [], expenses: [], settlements: [], stops: [] };
+  const t = { id: uid(), name, currency: cur, members: [], expenses: [], settlements: [], stops: [], exchanges: [] };
   db.trips.unshift(t); save();
-  view = { screen:'trip', tripId: t.id, tab:'timeline', showForm:false };
+  view = { screen:'trip', tripId: t.id, tab:'plan', showForm:false };
   render();
 }
 function delTrip(id) {
@@ -605,7 +631,7 @@ function delTrip(id) {
   sync.outbox = sync.outbox.filter(o => o.trip_id !== id); saveSync();
   save(); render();
 }
-function openTrip(id) { view = { screen:'trip', tripId:id, tab:'timeline', showForm:false }; render(); syncTrip(id); }
+function openTrip(id) { view = { screen:'trip', tripId:id, tab:'plan', showForm:false }; render(); syncTrip(id); }
 function setTab(tab)  { view.tab = tab; view.showForm = false; view.editId = ''; render(); }
 function scrollToId(id) { requestAnimationFrame(() => requestAnimationFrame(() =>
   document.getElementById(id)?.scrollIntoView({ behavior:'smooth', block:'start' }))); }
@@ -622,9 +648,11 @@ function openEditExpense(id) {
   render(); scrollToId('expense-form');
 }
 function toggleStopForm() {
-  view.showStopForm = !view.showStopForm; render();
+  view.showStopForm = !view.showStopForm; view.editStopId = ''; render();
   if (view.showStopForm) scrollToId('stop-form');
 }
+function openEditStop(id) { view.showStopForm = true; view.editStopId = id; render(); scrollToId('stop-form'); }
+function toggleFxForm() { view.showFxForm = !view.showFxForm; render(); if (view.showFxForm) scrollToId('fx-form'); }
 function toggleNewTrip() { view.showNewTrip = !view.showNewTrip; render(); }
 function openRecap()  { view.showRecap = true; render(); }
 function closeRecap() { view.showRecap = false; render(); }
@@ -683,9 +711,43 @@ function addStop(ev) {
   ev.preventDefault();
   const f = ev.target, name = f.sname.value.trim();
   if (!name) return;
-  const t = trip();
-  (t.stops = t.stops || []).push({ id: uid(), name, date: f.sdate.value, note: f.snote.value.trim() });
-  view.showStopForm = false; save(); render();
+  const t = trip(); t.stops = t.stops || [];
+  const rec = { id: view.editStopId || uid(), name, date: f.sdate.value, time: f.stime.value, note: f.snote.value.trim() };
+  const i = t.stops.findIndex(s => s.id === rec.id);
+  if (i >= 0) t.stops[i] = rec; else t.stops.push(rec);
+  view.showStopForm = false; view.editStopId = ''; save(); render();
+}
+function addExchange(ev) {
+  ev.preventDefault();
+  const t = trip(), f = ev.target;
+  const pay = parseFloat(f.fpay.value), got = parseFloat(f.fgot.value);
+  const cur = f.fcur.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!(pay > 0) || !(got > 0)) { alert('付出和换得的金额都要大于 0'); return; }
+  if (!cur || cur === t.currency) { alert(`换入货币要和主货币 ${t.currency} 不同`); return; }
+  (t.exchanges = t.exchanges || []).push({ id: uid(), date: f.fdate.value, fromCents: Math.round(pay * 100),
+    toCur: cur, toAmount: got, note: f.fnote.value.trim() });
+  view.showFxForm = false; save(); render();
+}
+function delExchange(id) {
+  if (!confirm('删除这条换汇记录？已记的支出汇率不受影响。')) return;
+  const t = trip(); t.exchanges = (t.exchanges || []).filter(x => x.id !== id); save(); render();
+}
+function fxPreview(f) {
+  const pay = parseFloat(f.fpay.value), got = parseFloat(f.fgot.value), cur = f.fcur.value.trim().toUpperCase() || '外币';
+  f.querySelector('.fx-prev').textContent = pay > 0 && got > 0
+    ? `汇率:1 ${cur} = ${fmtRate(pay / got)} ${f.dataset.main}` : '填好两个金额，自动算出汇率';
+}
+function setCur(f, c) {
+  c = c.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (f.cur.value !== c) f.cur.value = c;
+  const foreign = c && c !== f.dataset.main;
+  f.querySelector('.rate-row').style.display = foreign ? '' : 'none';
+  if (foreign) {
+    const hit = JSON.parse(f.dataset.rates || '{}')[c];
+    f.rate.value = hit ? hit.r : '';
+    f.querySelector('.hint').textContent = hit ? (hit.src === 'fx' ? '按你的换汇均价，可改' : '沿用上次，可改') : '没有换汇记录，请手填';
+  }
+  f.querySelectorAll('.cur-chip').forEach(b => b.classList.toggle('on', b.dataset.c === c));
 }
 function memberRefs(t, id) {
   return t.expenses.filter(e => e.payerId === id || (e.payers && id in e.payers) || e.participantIds.includes(id)).length
@@ -714,7 +776,7 @@ function detachStop(t, id) {
   t.expenses.forEach(e => { if (e.stopId === id) e.stopId = null; });
 }
 function delStop(id) {
-  if (!confirm('删除这个地点？挂在上面的支出会保留，只是不再挂地点。')) return;
+  if (!confirm('删除这条行程安排？挂在上面的支出会保留，只是不再挂计划。')) return;
   detachStop(trip(), id);
   save(); render();
 }
@@ -733,7 +795,7 @@ function render() {
 function goScreen(s) { view = { screen:s }; render(); }
 function bottomBar() {
   const items = view.screen === 'trip'
-    ? [['timeline','时间线'],['ledger','流水'],['settle','对账']].map(([k, l]) =>
+    ? [['plan','计划'],['ledger','流水'],['fx','换汇'],['settle','对账']].map(([k, l]) =>
         `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')">${l}</button>`)
     : [['list','行程'],['backup','备份']].map(([k, l]) =>
         `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')">${l}</button>`);
@@ -797,7 +859,7 @@ function statusChip(t) {
 }
 function renderTrip() {
   const t = trip();
-  const body = ({ timeline:renderTimeline, ledger:renderLedger, settle:renderSettle })[view.tab](t);
+  const body = ({ plan:renderPlan, ledger:renderLedger, fx:renderFx, settle:renderSettle })[view.tab](t);
   return `
   <button class="icon-btn" style="padding-left:0;margin-bottom:6px" onclick="goScreen('list')">← 所有行程</button>
   <div class="topbar">
@@ -817,7 +879,7 @@ function renderTrip() {
   ${statusChip(t)}
   ${view.showForm ? expenseForm(t) : ''}
   ${body}
-  ${t.members.length ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
+  ${t.members.length && view.tab !== 'fx' ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
   ${view.showRecap ? recapOverlay() : ''}
   ${view.showInvite ? inviteOverlay(t) : ''}
   ${view.showClaim ? claimOverlay(t) : ''}`;
@@ -849,44 +911,101 @@ function claimOverlay(t) {
     </div></div>`;
 }
 
-function renderTimeline(t) {
-  if (!t.members.length) return '<p class="muted">先在上面加成员，才能记账。</p>';
-  const stops = [...(t.stops || [])].sort((a, b) => a.date.localeCompare(b.date));
-  const loose = t.expenses.filter(e => !e.stopId);
-  const lines = list => list.length ? `<div class="exp-lines">${list.map(e =>
-    lr(`<span class="cat-dot"></span>${esc(e.desc)}`, `${fmt(e.mainCents)}`)).join('')}</div>` : '';
+function renderPlan(t) {
+  const stops = [...(t.stops || [])].sort((a, b) => ((a.date || '') + ' ' + (a.time || '')).localeCompare((b.date || '') + ' ' + (b.time || '')));
+  const today = new Date().toISOString().slice(0, 10);
+  const first = stops.length ? stops[0].date : '';
+  const WD = ['日','一','二','三','四','五','六'];
+  const days = [];
+  stops.forEach(s => { const g = days[days.length - 1]; if (g && g.date === s.date) g.items.push(s); else days.push({ date: s.date, items: [s] }); });
+  const es = view.editStopId ? stops.find(x => x.id === view.editStopId) : null;
   return `
   <div class="tl-head">
-    <button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加地点'}</button>
+    <h2 style="margin:0">旅行计划</h2>
+    <button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加行程'}</button>
   </div>
   ${view.showStopForm ? `
-  <form class="surface" id="stop-form" onsubmit="addStop(event)">
+  <form class="surface" id="stop-form" onsubmit="addStop(event)" style="margin-top:12px">
+    <div class="eb">${es ? '修改行程' : '什么时间去哪里'}</div>
     <div class="row">
-      <div><label>地点名称</label><input name="sname" placeholder="如 清水寺" required></div>
-      <div><label>日期</label><input name="sdate" type="date" value="${new Date().toISOString().slice(0,10)}" required></div>
+      <div><label>日期</label><input name="sdate" type="date" value="${es ? es.date : (days.length ? days[days.length - 1].date : today)}" required></div>
+      <div><label>时间(可选)</label><input name="stime" type="time" value="${es ? es.time || '' : ''}"></div>
     </div>
-    <label>游记 / 备注(可选)</label><input name="snote" placeholder="写点什么…">
-    <button class="cta" style="margin-top:16px">＋ 加地点</button>
+    <label>去哪里</label><input name="sname" placeholder="如 清水寺" value="${es ? esc(es.name) : ''}" required autofocus>
+    <label>备注(可选)</label><input name="snote" placeholder="订位、交通、要带什么…" value="${es ? esc(es.note || '') : ''}">
+    <button class="cta" style="margin-top:16px">${es ? '保存修改' : '加入计划'}</button>
   </form>` : ''}
-  <div style="margin-top:18px">
-    ${loose.length ? `<div class="stop-date">行程杂项</div>${lines(loose)}` : ''}
-    <button class="stop-add" onclick="openExpenseForm('')">＋ 记一笔 · 不挂地点</button>
-  </div>
-  <div class="timeline"><div class="tl-line"></div>
-    ${stops.map(s => `
-    <div class="stop">
-      <div class="stop-dot"></div>
-      <div class="tl-head"><div>
-        <div class="stop-date">${+s.date.slice(5,7)}/${+s.date.slice(8,10)}</div>
-        <div class="stop-name">${esc(s.name)}</div>
-      </div><button class="icon-btn" onclick="delStop('${s.id}')">移除</button></div>
-      ${s.note ? `<div class="stop-note">${esc(s.note)}</div>` : ''}
-      ${lines(t.expenses.filter(e => e.stopId === s.id))}
-      <button class="stop-add" onclick="openExpenseForm('${s.id}')">＋ 记一笔 · 挂在「${esc(s.name)}」</button>
-    </div>`).join('') || '<p class="muted">还没有地点。地点是可选的——右下角「＋ 记一笔」随时可以记账，不必先加地点。</p>'}
-  </div>`;
+  ${days.map(g => {
+    const n = Math.round((new Date(g.date) - new Date(first)) / 864e5) + 1;
+    const wd = WD[new Date(g.date + 'T00:00').getDay()];
+    return `<div class="plan-day"><b>${+g.date.slice(5,7)}/${+g.date.slice(8,10)} 周${wd}${g.date === today ? ' · 今天' : ''}</b><span>Day ${n}</span></div>
+    ${g.items.map(s => {
+      const spent = t.expenses.filter(e => e.stopId === s.id).reduce((x, e) => x + e.mainCents, 0);
+      return `<div class="plan-item">
+        <div class="pt num ${s.time ? '' : 'none'}">${s.time || '全天'}</div>
+        <div style="flex:1">
+          <div class="pn">${esc(s.name)}</div>
+          ${s.note ? `<div class="pm">${esc(s.note)}</div>` : ''}
+          ${spent ? `<div class="pm">已花 ${t.currency} ${fmt(spent)}</div>` : ''}
+        </div>
+        <button class="icon-btn" onclick="openEditStop('${s.id}')">改</button>
+        <button class="icon-btn" onclick="delStop('${s.id}')">×</button>
+      </div>`; }).join('')}`;
+  }).join('') || '<p class="muted" style="margin-top:14px">还没有计划。把什么时间去哪里排进来，出发前后都能随时调整。</p>'}`;
 }
 
+function renderFx(t) {
+  const ex = [...(t.exchanges || [])].sort((a, b) => b.date.localeCompare(a.date));
+  const curs = [...new Set(ex.map(x => x.toCur))];
+  const today = new Date().toISOString().slice(0, 10);
+  const known = [...new Set([...curs, ...t.expenses.map(e => e.currency), ...CURS])].filter(c => c !== t.currency).slice(0, 5);
+  const cards = curs.map(c => {
+    const list = ex.filter(x => x.toCur === c);
+    const got = list.reduce((s, x) => s + x.toAmount, 0);
+    const paid = list.reduce((s, x) => s + x.fromCents, 0);
+    const spent = Math.round(t.expenses.filter(e => e.currency === c).reduce((s, e) => s + e.amount, 0) * 100) / 100;
+    return `<div class="surface fx-card">
+      <div class="eb">${esc(c)} · 换汇均价</div>
+      <div class="s2-title num">1 ${esc(c)} = ${fmtRate(avgRate(t, c))} ${esc(t.currency)}</div>
+      <div style="margin-top:10px">
+        ${lr('累计付出', `${t.currency} ${fmt(paid)}`)}
+        ${lr('累计换入', `${c} ${+got.toFixed(2)}`)}
+        ${lr('已记账花费', `${c} ${spent}`)}
+        ${lr('约剩现金', `${c} ${+(got - spent).toFixed(2)}`)}
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:6px">约剩 = 换入 − 已记账花费，刷卡的不算，仅供参考。</div>
+    </div>`;
+  }).join('');
+  return `
+  <div class="tl-head">
+    <h2 style="margin:0">换汇记录</h2>
+    <button class="ghost" onclick="toggleFxForm()">${view.showFxForm ? '收起' : '＋ 记一次换汇'}</button>
+  </div>
+  ${view.showFxForm ? `
+  <form class="surface" id="fx-form" onsubmit="addExchange(event)" data-main="${esc(t.currency)}" style="margin-top:12px">
+    <div class="eb">什么时候换的钱</div>
+    <label>日期</label><input name="fdate" type="date" value="${today}" required>
+    <div class="row">
+      <div><label>付出 ${esc(t.currency)}</label><input name="fpay" type="number" step="any" min="0" inputmode="decimal" oninput="fxPreview(this.form)" required autofocus></div>
+      <div><label>换得</label><input name="fgot" type="number" step="any" min="0" inputmode="decimal" oninput="fxPreview(this.form)" required></div>
+      <div style="flex:0 0 76px"><label>货币</label><input name="fcur" value="${esc(known[0] || '')}" maxlength="5" oninput="fxPreview(this.form)" required></div>
+    </div>
+    <div style="margin-top:6px">${known.map(c => `<button type="button" class="icon-btn" onclick="const f=this.form;f.fcur.value='${c}';fxPreview(f)">${c}</button>`).join('')}</div>
+    <div class="hint fx-prev" style="margin-top:10px">填好两个金额，自动算出汇率</div>
+    <label>备注(可选)</label><input name="fnote" placeholder="如 机场柜台 / 银行 / ATM">
+    <button class="cta" style="margin-top:16px">保存换汇</button>
+  </form>` : ''}
+  <p class="muted" style="margin-top:12px">记下每次换钱的日期和实际汇率。之后用这种外币记账时，汇率自动用你的换汇均价。</p>
+  <div style="margin-top:14px">${cards}</div>
+  ${ex.length ? `<h2>历次换汇</h2>${ex.map(x => `
+    <div class="exp-row">
+      <div style="flex:1">
+        <div style="font-weight:600" class="num">${t.currency} ${fmt(x.fromCents)} → ${esc(x.toCur)} ${x.toAmount}</div>
+        <div class="who">${x.date} · 1 ${esc(x.toCur)} = ${fmtRate(x.fromCents / 100 / x.toAmount)} ${esc(t.currency)}${x.note ? ' · ' + esc(x.note) : ''}</div>
+      </div>
+      <button class="icon-btn" onclick="delExchange('${x.id}')">×</button>
+    </div>`).join('')}` : ''}`;
+}
 function setLedgerFilter(k, v) { (view.ledgerFilter = view.ledgerFilter || { cat:'', payer:'' })[k] = v; render(); }
 function renderLedger(t) {
   const lf = view.ledgerFilter || { cat:'', payer:'' };
@@ -925,48 +1044,68 @@ function renderLedger(t) {
 function expenseForm(t) {
   const e = view.editId ? t.expenses.find(x => x.id === view.editId) : null;
   const preset = e ? (e.stopId || '') : view.presetStopId;
-  const presetName = preset && (t.stops || []).find(s => s.id === preset);
   const last = t.last || {};
-  const cur0   = e ? e.currency : (last.currency || t.currency);
-  const rate0  = e ? e.rate     : (cur0 === t.currency ? 1 : last.rate || 1);
+  const today = new Date().toISOString().slice(0, 10);
+  const cur0 = e ? e.currency : (last.currency || t.currency);
+  const foreign0 = cur0 !== t.currency;
+  // 各外币的默认汇率:优先换汇均价,其次上次用的
+  const rates = {};
+  const addRate = (c, r, src) => { if (c && c !== t.currency && r > 0 && !rates[c]) rates[c] = { r: +r.toPrecision(6), src }; };
+  (t.exchanges || []).forEach(x => addRate(x.toCur, avgRate(t, x.toCur), 'fx'));
+  if (last.currency) addRate(last.currency, last.rate, 'last');
+  const rate0 = e ? e.rate : (foreign0 && rates[cur0] ? rates[cur0].r : '');
+  const hint0 = e ? '' : !foreign0 ? '' : rates[cur0] ? (rates[cur0].src === 'fx' ? '按你的换汇均价，可改' : '沿用上次，可改') : '没有换汇记录，请手填';
+  const used = new Set([t.currency, ...(t.exchanges || []).map(x => x.toCur), ...t.expenses.map(x => x.currency)]);
+  const chips = [...(used.size > 1 ? used : new Set([t.currency, ...CURS])), cur0].filter((c, i, a) => a.indexOf(c) === i).slice(0, 6);
   const payers0 = e ? e.payers
     : { [[last.payerId, sync.me[t.id], t.members[0].id].find(id => t.members.some(m => m.id === id))]: 1 };
   const multiPay = Object.keys(payers0).length > 1;
   const pv0 = id => multiPay && id in payers0 ? +(payers0[id] / (e.rate || 1) / 100).toFixed(2) : '';
-  const cat0   = [e && e.cat, last.cat].find(c => CATS.includes(c)) || CATS[0];
-  const date0  = e ? e.date : presetName && presetName.date || new Date().toISOString().slice(0,10);
+  const cat0 = [e && e.cat, last.cat].find(c => CATS.includes(c)) || CATS[0];
+  const date0 = e ? e.date : today;
   const sp = (e && e.split) || { type:'equal' };
   const svStyle = sp.type === 'equal' ? 'display:none' : '';
-  return `<form class="surface" id="expense-form" onsubmit="addExpense(event)">
-    <div class="eb">${e ? '编辑支出' : '记一笔'}${presetName ? ` · 挂在「${esc(presetName.name)}」` : ''}</div>
-    <div class="row">
-      <div><label>金额</label><input name="amount" type="number" step="any" min="0" inputmode="decimal" value="${e ? e.amount : ''}" required autofocus></div>
-      <div><label>货币</label><input name="cur" value="${esc(cur0)}" maxlength="5"
-        oninput="this.form.rate.disabled = this.value.trim().toUpperCase() === '${t.currency}'"></div>
-      <div><label>汇率 → ${t.currency}</label><input name="rate" type="number" step="any" min="0" value="${rate0}" ${cur0 !== t.currency ? '' : 'disabled'}></div>
+  const dflt = e ? '' : `（${esc(mname(t, Object.keys(payers0)[0]))} 付 · 全员平分 · 今天）`;
+  return `<form class="surface" id="expense-form" onsubmit="addExpense(event)" data-main="${esc(t.currency)}" data-rates='${esc(JSON.stringify(rates))}'>
+    <div class="eb">${e ? '编辑支出' : '记一笔'}</div>
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:3"><input class="amt-in" name="amount" type="number" step="any" min="0" inputmode="decimal" placeholder="0.00" value="${e ? e.amount : ''}" required autofocus></div>
+      <div style="flex:1.2"><input class="cur-in" name="cur" value="${esc(cur0)}" maxlength="5" oninput="setCur(this.form, this.value)"></div>
     </div>
-    <div style="margin-top:6px">${CURS.map(c => `<button type="button" class="icon-btn" onclick="const f=this.form;f.cur.value='${c}';f.rate.disabled='${c}'==='${t.currency}'">${c}</button>`).join('')}<button type="button" class="icon-btn" style="color:var(--accent-ink)" onclick="fetchRate(this.form)">自动查汇率</button></div>
-    <label>付款人(可多选合付，${esc(t.currency)} 以外按原币填各自付了多少)</label>
-    <div class="checks">${t.members.map(m =>
-      `<label><input type="checkbox" name="py" value="${m.id}" ${m.id in payers0 ? 'checked' : ''} onchange="payerToggle(this.form)">${esc(m.name)}<input class="sv pv" name="pv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${pv0(m.id)}" style="${multiPay ? '' : 'display:none'}"></label>`).join('')}</div>
-    <label>日期</label><input name="date" type="date" value="${date0}" required>
+    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">${chips.map(c =>
+      `<button type="button" class="chip cur-chip ${c === cur0 ? 'on' : ''}" data-c="${esc(c)}" onclick="setCur(this.form,'${esc(c)}')">${esc(c)}</button>`).join('')}</div>
+    <div class="rate-row" style="${foreign0 ? '' : 'display:none'};margin-top:4px">
+      <div class="row"><div><label>汇率 1 外币 = ? ${esc(t.currency)}</label><input name="rate" type="number" step="any" min="0" inputmode="decimal" value="${rate0}"></div>
+      <div style="flex:0 0 auto"><button type="button" class="icon-btn" style="color:var(--accent-ink)" onclick="fetchRate(this.form)">查实时汇率</button></div></div>
+      <div class="hint">${hint0}</div>
+    </div>
     <label>类别</label>
     <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${c}</label>`).join('')}</div>
-    <label>分法</label>
-    <select name="split" onchange="this.form.querySelectorAll('.sv').forEach(x => x.style.display = this.value === 'equal' ? 'none' : '')">
-      <option value="equal">平分</option>
-      <option value="shares" ${sp.type === 'shares' ? 'selected' : ''}>按份数(如大人 2 份小孩 1 份)</option>
-      <option value="amount" ${sp.type === 'amount' ? 'selected' : ''}>按金额(各人实际消费，${esc(t.currency)} 以外按原币填)</option>
-    </select>
-    <label>参与人(默认全员)</label>
-    <div class="checks">${t.members.map(m =>
-      `<label><input type="checkbox" name="pt" value="${m.id}" ${!e || e.participantIds.includes(m.id) ? 'checked' : ''}>${esc(m.name)}<input class="sv" name="sv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${sp.values && sp.values[m.id] != null ? sp.values[m.id] : ''}" style="${svStyle}"></label>`).join('')}</div>
-    <div class="row">
-      <div><label>备注(可选)</label><input name="desc" placeholder="如 一兰拉面" value="${e ? esc(e.desc) : ''}"></div>
-      <div><label>挂在地点(可选)</label><select name="stop"><option value="">不挂地点</option>${(t.stops || []).map(s =>
-        `<option value="${s.id}" ${s.id === preset ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
-    </div>
-    <button class="cta" style="margin-top:18px">${e ? '保存修改' : '保存这一笔'}</button>
+    <details class="section" ${e ? 'open' : ''} style="margin-top:18px">
+      <summary>更多选项${dflt}</summary>
+      <div>
+        <label>付款人(可多选合付，${esc(t.currency)} 以外按原币填各自付了多少)</label>
+        <div class="checks">${t.members.map(m =>
+          `<label><input type="checkbox" name="py" value="${m.id}" ${m.id in payers0 ? 'checked' : ''} onchange="payerToggle(this.form)">${esc(m.name)}<input class="sv pv" name="pv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${pv0(m.id)}" style="${multiPay ? '' : 'display:none'}"></label>`).join('')}</div>
+        <label>参与人(默认全员)</label>
+        <div class="checks">${t.members.map(m =>
+          `<label><input type="checkbox" name="pt" value="${m.id}" ${!e || e.participantIds.includes(m.id) ? 'checked' : ''}>${esc(m.name)}<input class="sv" name="sv-${m.id}" type="number" step="any" min="0" placeholder="0" value="${sp.values && sp.values[m.id] != null ? sp.values[m.id] : ''}" style="${svStyle}"></label>`).join('')}</div>
+        <label>分法</label>
+        <select name="split" onchange="this.form.querySelectorAll('.sv:not(.pv)').forEach(x => x.style.display = this.value === 'equal' ? 'none' : '')">
+          <option value="equal">平分</option>
+          <option value="shares" ${sp.type === 'shares' ? 'selected' : ''}>按份数(如大人 2 份小孩 1 份)</option>
+          <option value="amount" ${sp.type === 'amount' ? 'selected' : ''}>按金额(各人实际消费，${esc(t.currency)} 以外按原币填)</option>
+        </select>
+        <div class="row">
+          <div><label>日期</label><input name="date" type="date" value="${date0}" required></div>
+          <div><label>备注</label><input name="desc" placeholder="如 一兰拉面" value="${e ? esc(e.desc) : ''}"></div>
+        </div>
+        <label>挂在行程(可选)</label>
+        <select name="stop"><option value="">不挂</option>${(t.stops || []).map(s =>
+          `<option value="${s.id}" ${s.id === preset ? 'selected' : ''}>${esc(s.date.slice(5))} ${esc(s.name)}</option>`).join('')}</select>
+      </div>
+    </details>
+    <button class="cta" style="margin-top:18px">${e ? '保存修改' : '保存'}</button>
   </form>`;
 }
 
@@ -1029,7 +1168,7 @@ function recapOverlay() {
       <div class="recap-stats">
         <div class="stat-box"><div class="stat-num">${s.days}</div><div class="stat-lb">天</div></div>
         <div class="stat-box"><div class="stat-num">${t.expenses.length}</div><div class="stat-lb">笔支出</div></div>
-        <div class="stat-box"><div class="stat-num">${(t.stops || []).length}</div><div class="stat-lb">地点</div></div>
+        <div class="stat-box"><div class="stat-num">${(t.stops || []).length}</div><div class="stat-lb">行程</div></div>
       </div>
       <div class="recap-total">总花费<b>${t.currency} ${fmt(s.total)}</b></div>
       <div class="recap-facts">${s.facts.map(f => `<div class="recap-fact">${esc(f)}</div>`).join('')}</div>
@@ -1080,7 +1219,7 @@ function drawRecap() {
   x.fillText(s.range.toUpperCase(), 30, 86);
   x.strokeStyle = '#8A6B3E'; x.globalAlpha = .6; x.lineWidth = 1;
   x.beginPath(); x.moveTo(30, 108); x.lineTo(W-30, 108); x.stroke(); x.globalAlpha = 1;
-  const stats = [[String(s.days), '天'], [String(t.expenses.length), '笔支出'], [String((t.stops || []).length), '地点']];
+  const stats = [[String(s.days), '天'], [String(t.expenses.length), '笔支出'], [String((t.stops || []).length), '行程']];
   x.textAlign = 'center';
   stats.forEach(([n, lb], i) => {
     const cx = 30 + (i+.5)*((W-60)/3);
