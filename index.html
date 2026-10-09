@@ -402,6 +402,53 @@ function avgRate(t, cur) {
   for (const x of (t.exchanges || [])) if (x.toCur === cur) { paid += x.fromCents; got += x.toAmount; }
   return got > 0 ? paid / 100 / got : null;
 }
+// 现金汇率按「先换先花」:最早换的那批外币先被花掉,每笔账的汇率 = 它实际花掉的那几批的加权汇率。
+// extra 是一笔还没存的(或正在改的)假想支出,用来在记账表单里实时给出建议汇率。
+function fifoRates(t, cur, extra) {
+  const batches = (t.exchanges || []).filter(x => x.toCur === cur).sort((a, b) => a.date.localeCompare(b.date))
+    .map(x => ({ date: x.date, left: x.toAmount, rate: x.fromCents / 100 / x.toAmount }));
+  if (!batches.length) return {};
+  const avg = avgRate(t, cur);
+  const list = t.expenses.filter(e => e.currency === cur && (e.pay || 'cash') === 'cash' && !(extra && e.id === extra.id));
+  if (extra) list.push(extra);
+  list.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || '~').localeCompare(b.createdAt || '~'));
+  const out = {};
+  for (const e of list) {
+    let need = e.amount, cost = 0;
+    while (need > 1e-9) {
+      const b = batches.find(b => b.left > 1e-9 && b.date <= e.date) || batches.find(b => b.left > 1e-9);
+      if (!b) { cost += need * avg; break; }
+      const take = Math.min(need, b.left);
+      cost += take * b.rate; b.left -= take; need -= take;
+    }
+    out[e.id] = cost / e.amount;
+  }
+  return out;
+}
+// 建议汇率:现金 → 按换汇汇率;刷卡/没有换汇记录 → 沿用上次
+function suggestRateFor(t, cur, date, amount, editId, pay) {
+  if (pay === 'cash') {
+    const id = editId || '__new', old = editId ? t.expenses.find(x => x.id === editId) : null;
+    const r = fifoRates(t, cur, { id, date, amount: Math.max(amount || 0, 1e-6), createdAt: old ? old.createdAt : undefined })[id];
+    if (r > 0) return { r: +r.toPrecision(6), src: 'fx' };
+  }
+  const last = t.last && t.last.currency === cur ? t.last.rate : null;
+  return last > 0 ? { r: last, src: 'last' } : null;
+}
+// 换汇率重新定价:总额、各付款人垫付额按新汇率重算,余数由金额最大的付款人吸收
+function repriceExpense(e, rate) {
+  const mainCents = Math.round(e.amount * rate * 100);
+  const ids = Object.keys(e.payers);
+  let payers;
+  if (ids.length === 1) payers = { [ids[0]]: mainCents };
+  else {
+    payers = {};
+    for (const id of ids) payers[id] = Math.round(Math.round(e.payers[id] / e.rate) / 100 * rate * 100);
+    const top = ids.reduce((a, b) => payers[b] > payers[a] ? b : a);
+    payers[top] += mainCents - Object.values(payers).reduce((x, y) => x + y, 0);
+  }
+  return { ...e, rate, mainCents, payers, prevRate: e.rate, editedAt: new Date().toISOString() };
+}
 (function selfTest() {
   const t = { members:[{id:'A'},{id:'B'},{id:'C'}], settlements:[], expenses:[
     { payers:{A: 90000}, participantIds:['A','C'],     mainCents: 90000, desc:'晚餐' },
@@ -487,6 +534,15 @@ function avgRate(t, cur) {
   // 换汇:100.00 MYR→3000 JPY,200.00 MYR→6200 JPY,均价 = 300 / 9200
   const tx = { exchanges:[{toCur:'JPY', fromCents:10000, toAmount:3000},{toCur:'JPY', fromCents:20000, toAmount:6200}] };
   console.assert(Math.abs(avgRate(tx, 'JPY') - 300/9200) < 1e-12 && avgRate(tx, 'USD') === null, '换汇均价算错', tx);
+  // 先换先花:周一 100 MYR→3000 JPY(0.033333),周二 100 MYR→2500 JPY(0.04)
+  const tf = { currency:'MYR', exchanges:[{date:'2026-10-12', toCur:'JPY', fromCents:10000, toAmount:3000},{date:'2026-10-13', toCur:'JPY', fromCents:10000, toAmount:2500}],
+    expenses:[{id:'a', date:'2026-10-12', currency:'JPY', amount:2000, createdAt:'1'},{id:'b', date:'2026-10-14', currency:'JPY', amount:2000, createdAt:'2'}] };
+  const fr = fifoRates(tf, 'JPY');
+  console.assert(Math.abs(fr.a - 100/3000) < 1e-9 && Math.abs(fr.b - (1000*100/3000 + 1000*0.04)/2000) < 1e-9, '先换先花算错', fr);
+  // 重新定价:单人付款 / 两人合付,总额与垫付额必须对得上
+  const r1 = repriceExpense({ amount:1000, rate:0.1, mainCents:10000, payers:{A:10000} }, 0.03);
+  const r2 = repriceExpense({ amount:1000, rate:0.1, mainCents:10000, payers:{A:3000, B:7000} }, 0.03);
+  console.assert(r1.mainCents === 3000 && r1.payers.A === 3000 && r2.mainCents === 3000 && r2.payers.A === 900 && r2.payers.B === 2100 && r2.prevRate === 0.1, '重新定价算错', r1, r2);
   // 出发倒计时 / 旅途第几天
   const dts = ['2026-10-12', '2026-10-14'];
   console.assert(tripStatus(dts, '2026-10-10') === '距出发还有 2 天' && tripStatus(dts, '2026-10-13') === '旅途第 2 天 / 共 3 天'
@@ -700,7 +756,7 @@ async function fetchRate(f) {
   if (!cur || cur === main) return;
   try {
     const r = await (await fetch(`https://api.frankfurter.dev/v1/latest?base=${cur}&symbols=${main}`)).json();
-    if (r.rates && r.rates[main]) f.rate.value = r.rates[main];
+    if (r.rates && r.rates[main]) { f.rate.value = r.rates[main]; f.rate.dataset.manual = '1'; f.querySelector('.hint').textContent = '今日汇率，仅供参考；现金支出建议用你换汇时的汇率'; }
     else alert(`查不到 ${cur} → ${main} 的汇率，手动填吧`);
   } catch { alert('汇率服务连不上（离线？），手动填吧'); }
 }
@@ -783,16 +839,19 @@ function toggleStopForm() {
   if (view.showStopForm) scrollToId('stop-form');
 }
 function openEditStop(id) { view.showStopForm = true; view.editStopId = id; render(); scrollToId('stop-form'); }
-function toggleFxForm() { view.showFxForm = !view.showFxForm; render(); if (view.showFxForm) scrollToId('fx-form'); }
-function toggleNewTrip() { view.showNewTrip = !view.showNewTrip; render(); }
-function openRecap()  { view.showRecap = true; render(); }
-function closeRecap() { view.showRecap = false; render(); }
-function addMember(ev) {
-  ev.preventDefault();
-  const inp = ev.target.mname, name = inp.value.trim();
-  if (!name) return;
-  if (trip().members.some(m => m.name === name)) { alert('已有同名成员'); return; }
-  trip().members.push({ id: uid(), name }); save(); render();
+function toggleFxForm() { view.showFxForm = !view.showFxForm; view.editFxId = ''; render(); if (view.showFxForm) scrollToId('fx-form'); }
+function openEditFx(id) { view.showFxForm = true; view.editFxId = id; render(); scrollToId('fx-form'); }
+// 把已记的现金支出按换汇汇率重算(先给出差额,确认后才改)
+function repriceCash(cur) {
+  const t = trip(), map = fifoRates(t, cur);
+  const todo = t.expenses.filter(e => e.currency === cur && (e.pay || 'cash') === 'cash' && map[e.id] && Math.abs(+map[e.id].toPrecision(6) / e.rate - 1) > 0.0005);
+  if (!todo.length) { alert('没有需要重算的账'); return; }
+  let before = 0, after = 0;
+  const next = todo.map(e => { const r = repriceExpense(e, +map[e.id].toPrecision(6)); before += e.mainCents; after += r.mainCents; return r; });
+  const d = after - before;
+  if (!confirm(`将按换汇汇率重算 ${todo.length} 笔 ${cur} 现金支出。\n合计 ${t.currency} ${fmt(before)} → ${fmt(after)}（${d >= 0 ? '多' : '少'} ${fmt(Math.abs(d))}）\n建议先在「备份」页导出一份。继续？`)) return;
+  next.forEach(r => { t.expenses[t.expenses.findIndex(x => x.id === r.id)] = r; });
+  save(); render();
 }
 function addExpense(ev) {
   ev.preventDefault();
@@ -917,9 +976,11 @@ function addExchange(ev) {
   const cur = f.fcur.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!(pay > 0) || !(got > 0)) { alert('付出和换得的金额都要大于 0'); return; }
   if (!cur || cur === t.currency) { alert(`换入货币要和主货币 ${t.currency} 不同`); return; }
-  (t.exchanges = t.exchanges || []).push({ id: uid(), date: f.fdate.value, fromCents: Math.round(pay * 100),
-    toCur: cur, toAmount: got, note: f.fnote.value.trim() });
-  view.showFxForm = false; save(); render();
+  t.exchanges = t.exchanges || [];
+  const rec = { id: view.editFxId || uid(), date: f.fdate.value, fromCents: Math.round(pay * 100), toCur: cur, toAmount: got, note: f.fnote.value.trim() };
+  const i = t.exchanges.findIndex(x => x.id === rec.id);
+  if (i >= 0) t.exchanges[i] = rec; else t.exchanges.push(rec);
+  view.showFxForm = false; view.editFxId = ''; save(); render();
 }
 function delExchange(id) {
   if (!confirm('删除这条换汇记录？已记的支出汇率不受影响。')) return;
@@ -935,12 +996,18 @@ function setCur(f, c) {
   if (f.cur.value !== c) f.cur.value = c;
   const foreign = c && c !== f.dataset.main;
   f.querySelector('.rate-row').style.display = foreign ? '' : 'none';
-  if (foreign) {
-    const hit = JSON.parse(f.dataset.rates || '{}')[c];
-    f.rate.value = hit ? hit.r : '';
-    f.querySelector('.hint').textContent = hit ? (hit.src === 'fx' ? '按你的换汇均价，可改' : '沿用上次，可改') : '没有换汇记录，请手填';
-  }
   f.querySelectorAll('.cur-chip').forEach(b => b.classList.toggle('on', b.dataset.c === c));
+  if (foreign) { f.rate.dataset.manual = ''; refreshRate(f, true); }
+}
+// 按换汇记录刷新建议汇率;用户手改过汇率、或正在编辑旧账时不覆盖(除非 force)
+function refreshRate(f, force) {
+  const c = f.cur.value;
+  if (!c || c === f.dataset.main) return;
+  if (f.rate.dataset.manual && !force) return;
+  if (force) f.rate.dataset.manual = '';
+  const hit = suggestRateFor(trip(), c, f.date.value, parseFloat(f.amount.value) || 0, view.editId, f.pay.value);
+  f.rate.value = hit ? hit.r : '';
+  f.querySelector('.hint').textContent = hit ? (hit.src === 'fx' ? '按你换汇时的汇率（先换先花），可改' : '沿用上次，可改') : '没有换汇记录，请手填';
 }
 function memberRefs(t, id) {
   return t.expenses.filter(e => e.payerId === id || (e.payers && id in e.payers) || e.participantIds.includes(id)).length
@@ -1199,6 +1266,7 @@ function photoOverlay(t) {
 
 function renderFx(t) {
   const ex = [...(t.exchanges || [])].sort((a, b) => b.date.localeCompare(a.date));
+  const xe = view.editFxId ? ex.find(x => x.id === view.editFxId) : null;
   const curs = [...new Set(ex.map(x => x.toCur))];
   const today = new Date().toISOString().slice(0, 10);
   const known = [...new Set([...curs, ...t.expenses.map(e => e.currency), ...CURS])].filter(c => c !== t.currency).slice(0, 5);
@@ -1207,6 +1275,8 @@ function renderFx(t) {
     const got = list.reduce((s, x) => s + x.toAmount, 0);
     const paid = list.reduce((s, x) => s + x.fromCents, 0);
     const spent = Math.round(t.expenses.filter(e => e.currency === c && (e.pay || 'cash') === 'cash').reduce((s, e) => s + e.amount, 0) * 100) / 100;
+    const fr = fifoRates(t, c);
+    const off = t.expenses.filter(e => e.currency === c && (e.pay || 'cash') === 'cash' && fr[e.id] && Math.abs(+fr[e.id].toPrecision(6) / e.rate - 1) > 0.0005).length;
     return `<div class="surface fx-card">
       <div class="eb">${esc(c)} · 换汇均价</div>
       <div class="s2-title num">1 ${esc(c)} = ${fmtRate(avgRate(t, c))} ${esc(t.currency)}</div>
@@ -1216,7 +1286,10 @@ function renderFx(t) {
         ${lr('现金已花', `${c} ${spent}`)}
         ${lr('约剩现金', `${c} ${+(got - spent).toFixed(2)}`)}
       </div>
-      <div class="muted" style="font-size:12px;margin-top:6px">约剩 = 换入 − 记为「现金」的花费；刷卡 / 转账的不计入，仅供参考。</div>
+      <div class="muted" style="font-size:12px;margin-top:6px">约剩 = 换入 − 记为「现金」的花费；刷卡 / 转账的不计入，仅供参考。新记的现金支出按「先换先花」取你换汇时的汇率。</div>
+      ${off ? `<div style="margin-top:12px;font-weight:700;font-size:14px">有 ${off} 笔现金支出的汇率和你换汇时的不一致</div>
+        <button style="width:100%;margin-top:10px;background:var(--lime);color:#14141F;font-weight:800" onclick="repriceCash('${esc(c)}')">按换汇汇率重算这 ${off} 笔</button>`
+        : `<div class="muted" style="margin-top:10px">已记的现金支出汇率都和换汇一致 ✓</div>`}
     </div>`;
   }).join('');
   return `
@@ -1226,17 +1299,17 @@ function renderFx(t) {
   </div>
   ${view.showFxForm ? `
   <form class="surface" id="fx-form" onsubmit="addExchange(event)" data-main="${esc(t.currency)}" style="margin-top:12px">
-    <div class="eb">什么时候换的钱</div>
-    <label>日期</label><input name="fdate" type="date" value="${today}" required>
+    <div class="eb">${xe ? '修改换汇' : '什么时候换的钱'}</div>
+    <label>哪天换的(就选当时那天)</label><input name="fdate" type="date" value="${xe ? xe.date : today}" required>
     <div class="row">
-      <div><label>付出 ${esc(t.currency)}</label><input name="fpay" type="number" step="any" min="0" inputmode="decimal" oninput="fxPreview(this.form)" required autofocus></div>
-      <div><label>换得</label><input name="fgot" type="number" step="any" min="0" inputmode="decimal" oninput="fxPreview(this.form)" required></div>
-      <div style="flex:0 0 76px"><label>货币</label><input name="fcur" value="${esc(known[0] || '')}" maxlength="5" oninput="fxPreview(this.form)" required></div>
+      <div><label>付出 ${esc(t.currency)}</label><input name="fpay" type="number" step="any" min="0" inputmode="decimal" value="${xe ? xe.fromCents / 100 : ''}" oninput="fxPreview(this.form)" required autofocus></div>
+      <div><label>换得</label><input name="fgot" type="number" step="any" min="0" inputmode="decimal" value="${xe ? xe.toAmount : ''}" oninput="fxPreview(this.form)" required></div>
+      <div style="flex:0 0 76px"><label>货币</label><input name="fcur" value="${esc(xe ? xe.toCur : (known[0] || ''))}" maxlength="5" oninput="fxPreview(this.form)" required></div>
     </div>
     <div style="margin-top:6px">${known.map(c => `<button type="button" class="icon-btn" onclick="const f=this.form;f.fcur.value='${c}';fxPreview(f)">${c}</button>`).join('')}</div>
-    <div class="hint fx-prev" style="margin-top:10px">填好两个金额，自动算出汇率</div>
-    <label>备注(可选)</label><input name="fnote" placeholder="如 机场柜台 / 银行 / ATM">
-    <button class="cta" style="margin-top:16px">保存换汇</button>
+    <div class="hint fx-prev" style="margin-top:10px">${xe ? `汇率:1 ${esc(xe.toCur)} = ${fmtRate(xe.fromCents / 100 / xe.toAmount)} ${esc(t.currency)}` : '填好两个金额，自动算出汇率'}</div>
+    <label>备注(可选)</label><input name="fnote" placeholder="如 跟小明换的 / 机场柜台" value="${xe ? esc(xe.note || '') : ''}">
+    <button class="cta" style="margin-top:16px">${xe ? '保存修改' : '保存换汇'}</button>
   </form>` : ''}
   <p class="muted" style="margin-top:12px">记下每次换钱的日期和实际汇率。之后用这种外币记账时，汇率自动用你的换汇均价。</p>
   <div style="margin-top:14px">${cards}</div>
@@ -1246,6 +1319,7 @@ function renderFx(t) {
         <div style="font-weight:600" class="num">${t.currency} ${fmt(x.fromCents)} → ${esc(x.toCur)} ${x.toAmount}</div>
         <div class="who">${x.date} · 1 ${esc(x.toCur)} = ${fmtRate(x.fromCents / 100 / x.toAmount)} ${esc(t.currency)}${x.note ? ' · ' + esc(x.note) : ''}</div>
       </div>
+      <button class="icon-btn" onclick="openEditFx('${x.id}')">改</button>
       <button class="icon-btn" onclick="delExchange('${x.id}')">×</button>
     </div>`).join('')}` : ''}`;
 }
@@ -1305,13 +1379,6 @@ function expenseForm(t) {
   const today = new Date().toISOString().slice(0, 10);
   const cur0 = e ? e.currency : (last.currency || t.currency);
   const foreign0 = cur0 !== t.currency;
-  // 各外币的默认汇率:优先换汇均价,其次上次用的
-  const rates = {};
-  const addRate = (c, r, src) => { if (c && c !== t.currency && r > 0 && !rates[c]) rates[c] = { r: +r.toPrecision(6), src }; };
-  (t.exchanges || []).forEach(x => addRate(x.toCur, avgRate(t, x.toCur), 'fx'));
-  if (last.currency) addRate(last.currency, last.rate, 'last');
-  const rate0 = e ? e.rate : (foreign0 && rates[cur0] ? rates[cur0].r : '');
-  const hint0 = e ? '' : !foreign0 ? '' : rates[cur0] ? (rates[cur0].src === 'fx' ? '按你的换汇均价，可改' : '沿用上次，可改') : '没有换汇记录，请手填';
   const used = new Set([t.currency, ...(t.exchanges || []).map(x => x.toCur), ...t.expenses.map(x => x.currency)]);
   const chips = [...(used.size > 1 ? used : new Set([t.currency, ...CURS])), cur0].filter((c, i, a) => a.indexOf(c) === i).slice(0, 6);
   const payers0 = e ? e.payers
@@ -1321,21 +1388,25 @@ function expenseForm(t) {
   const cat0 = [e && e.cat, last.cat].find(c => CATS.includes(c)) || CATS[0];
   const date0 = isEdit ? e.date : today;
   const pay0 = e ? (e.pay || 'cash') : (last.pay || 'cash');
+  const sug0 = !isEdit && foreign0 ? suggestRateFor(t, cur0, today, 0, '', pay0) : null;
+  const rate0 = isEdit ? e.rate : (sug0 ? sug0.r : '');
+  const hint0 = isEdit ? '已锁定为记账时的汇率；想改成换汇汇率，点下面「用我的换汇汇率」' : !foreign0 ? '' : sug0 ? (sug0.src === 'fx' ? '按你换汇时的汇率（先换先花），可改' : '沿用上次，可改') : '没有换汇记录，请手填';
   const sp = (e && e.split) || { type:'equal' };
   const svStyle = sp.type === 'equal' ? 'display:none' : '';
   const dflt = isEdit ? '' : `（${esc(mname(t, Object.keys(payers0)[0]))} 付 · 全员平分 · 今天）`;
-  return `<form class="surface" id="expense-form" onsubmit="addExpense(event)" data-main="${esc(t.currency)}" data-rates='${esc(JSON.stringify(rates))}'>
+  return `<form class="surface" id="expense-form" onsubmit="addExpense(event)" data-main="${esc(t.currency)}">
     <div class="eb">${isEdit ? '编辑支出' : e ? '再记一笔 · 复制自上一笔' : '记一笔'}</div>
     <div class="row" style="align-items:flex-end">
-      <div style="flex:3"><input class="amt-in" name="amount" type="number" step="any" min="0" inputmode="decimal" placeholder="0.00" value="${e ? e.amount : ''}" required autofocus></div>
+      <div style="flex:3"><input class="amt-in" name="amount" type="number" step="any" min="0" inputmode="decimal" placeholder="0.00" value="${e ? e.amount : ''}" oninput="refreshRate(this.form)" required autofocus></div>
       <div style="flex:1.2"><input class="cur-in" name="cur" value="${esc(cur0)}" maxlength="5" oninput="setCur(this.form, this.value)"></div>
     </div>
     <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">${chips.map(c =>
       `<button type="button" class="chip cur-chip ${c === cur0 ? 'on' : ''}" data-c="${esc(c)}" onclick="setCur(this.form,'${esc(c)}')">${esc(c)}</button>`).join('')}</div>
     <div class="rate-row" style="${foreign0 ? '' : 'display:none'};margin-top:4px">
-      <div class="row"><div><label>汇率 1 外币 = ? ${esc(t.currency)}</label><input name="rate" type="number" step="any" min="0" inputmode="decimal" value="${rate0}"></div>
-      <div style="flex:0 0 auto"><button type="button" class="icon-btn" style="color:var(--accent-ink)" onclick="fetchRate(this.form)">查实时汇率</button></div></div>
+      <div class="row"><div><label>汇率 1 外币 = ? ${esc(t.currency)}</label><input name="rate" type="number" step="any" min="0" inputmode="decimal" value="${rate0}" data-manual="${isEdit ? '1' : ''}" oninput="this.dataset.manual='1'"></div>
+      </div>
       <div class="hint">${hint0}</div>
+      <div style="margin-top:2px"><button type="button" class="icon-btn" style="color:var(--accent-ink);padding-left:0" onclick="refreshRate(this.form,true)">用我的换汇汇率</button><button type="button" class="icon-btn" onclick="fetchRate(this.form)">查今日汇率(仅参考)</button></div>
     </div>
     <label>类别</label>
     <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${CATICON[c]} ${c}</label>`).join('')}</div>
@@ -1356,9 +1427,9 @@ function expenseForm(t) {
           <option value="amount" ${sp.type === 'amount' ? 'selected' : ''}>按金额(各人实际消费，${esc(t.currency)} 以外按原币填)</option>
         </select>
         <label>支付方式(现金会从换汇的现金里扣)</label>
-        <div class="checks"><label><input type="radio" name="pay" value="cash" ${pay0 === 'cash' ? 'checked' : ''}>现金</label><label><input type="radio" name="pay" value="card" ${pay0 === 'card' ? 'checked' : ''}>刷卡 / 转账</label></div>
+        <div class="checks"><label><input type="radio" name="pay" value="cash" ${pay0 === 'cash' ? 'checked' : ''} onchange="refreshRate(this.form)">现金</label><label><input type="radio" name="pay" value="card" ${pay0 === 'card' ? 'checked' : ''} onchange="refreshRate(this.form)">刷卡 / 转账</label></div>
         <div class="row">
-          <div><label>日期</label><input name="date" type="date" value="${date0}" required></div>
+          <div><label>日期</label><input name="date" type="date" value="${date0}" onchange="refreshRate(this.form)" required></div>
           <div><label>备注</label><input name="desc" placeholder="如 一兰拉面" value="${e ? esc(e.desc) : ''}"></div>
         </div>
         <label>挂在行程(可选)</label>
