@@ -841,6 +841,16 @@ function toggleStopForm() {
 function openEditStop(id) { view.showStopForm = true; view.editStopId = id; render(); scrollToId('stop-form'); }
 function toggleFxForm() { view.showFxForm = !view.showFxForm; view.editFxId = ''; render(); if (view.showFxForm) scrollToId('fx-form'); }
 function openEditFx(id) { view.showFxForm = true; view.editFxId = id; render(); scrollToId('fx-form'); }
+function toggleNewTrip() { view.showNewTrip = !view.showNewTrip; render(); }
+function openRecap()  { view.showRecap = true; render(); }
+function closeRecap() { view.showRecap = false; render(); }
+function addMember(ev) {
+  ev.preventDefault();
+  const inp = ev.target.mname, name = inp.value.trim();
+  if (!name) return;
+  if (trip().members.some(m => m.name === name)) { alert('已有同名成员'); return; }
+  trip().members.push({ id: uid(), name }); save(); render();
+}
 // 把已记的现金支出按换汇汇率重算(先给出差额,确认后才改)
 function repriceCash(cur) {
   const t = trip(), map = fifoRates(t, cur);
