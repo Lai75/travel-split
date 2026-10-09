@@ -184,6 +184,30 @@
   .plan-item .pn { font-family:var(--serif); font-size:17px; font-weight:700; }
   .plan-item .pm { font-size:12.5px; color:var(--sub); margin-top:3px; line-height:1.6; }
   .fx-card .s2-title { font-size:21px; }
+  .tick { flex:0 0 20px; width:20px; height:20px; border-radius:50%; border:1.4px solid var(--faint); background:none;
+    padding:0; margin-top:3px; display:flex; align-items:center; justify-content:center; }
+  .tick.on { background:var(--ink); border-color:var(--ink); }
+  .tick.on::after { content:'✓'; color:#fff; font-size:11px; line-height:1; }
+  .plan-item.done .pn { color:var(--sub); text-decoration:line-through; text-decoration-color:var(--faint); }
+  .ptag { display:inline-block; font-family:-apple-system,system-ui,'PingFang SC',sans-serif; font-size:10.5px; font-weight:600;
+    letter-spacing:.06em; color:var(--accent-ink); border:1px solid var(--line); border-radius:999px; padding:1px 8px; margin-right:8px; vertical-align:2px; }
+  .plan-item a { font-size:12px; color:var(--accent-ink); text-decoration:underline; text-decoration-color:var(--faint); text-underline-offset:3px; }
+  .ph-grid { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .ph { width:76px; height:76px; border-radius:8px; object-fit:cover; background:var(--line); cursor:pointer; display:block; }
+  button.ph.add { border:1px dashed var(--faint); background:none; color:var(--sub); font-size:22px; font-weight:300; padding:0; }
+  .todo { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); }
+  .todo label { display:flex; align-items:center; gap:10px; margin:0; font-size:14px; letter-spacing:0; text-transform:none; color:var(--ink); font-weight:500; flex:1; }
+  .todo input { width:auto; accent-color:var(--ink); }
+  .todo.done label { color:var(--sub); text-decoration:line-through; }
+  .lb-img { max-width:94vw; max-height:70vh; border-radius:6px; background:#000; }
+  .lb-cap { color:#E3DCC8; font-size:12.5px; letter-spacing:.08em; }
+  @media print {
+    body { background:#fff; }
+    .bottombar, .fab, button, .icon-btn, .ghost { display:none !important; }
+    #app { padding:0; max-width:none; }
+    .plan-item, .plan-day { break-inside:avoid; }
+    a { color:inherit; text-decoration:none; }
+  }
   .hero { padding:2px 0 26px; }
   .hero h1 { margin-top:8px; }
   .hero p { margin-top:8px; }
@@ -219,7 +243,7 @@ const fmt  = c => (c/100).toFixed(2);
 const mname = (t,id) => (t.members.find(m => m.id === id) || {name:'?'}).name;
 const CATS = ['餐饮','住宿','交通','门票','购物','其他'];
 const CURS = ['MYR','JPY','USD','CNY','SGD'];
-const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements', exchange:'exchanges' };
+const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements', exchange:'exchanges', todo:'todos' };
 
 function mainPayer(e, memberSet) {
   let best = null;
@@ -236,7 +260,7 @@ function expenseShares(e, memberSet) {
   if (sp.type === 'amount') {
     ids.forEach(id => shares[id] = Math.round((sp.values[id] || 0) * e.rate * 100));
   } else {
-    const w = id => sp.type === 'shares' ? (sp.values[id] || 0) : 1;
+    const w = id => (sp.type === 'shares' || sp.type === 'percent') ? (sp.values[id] || 0) : 1;
     const W = ids.reduce((s, id) => s + w(id), 0) || 1;
     ids.forEach(id => shares[id] = Math.floor(e.mainCents * w(id) / W));
   }
@@ -282,6 +306,67 @@ function transferDetail(t, from, to) {
     sum += part;
   }
   return { lines, sum };
+}
+const KINDS = ['景点','美食','住宿','交通','其他'];
+const PHOTO_MAX = 12;
+function tripStatus(dates, today) {
+  if (!dates.length) return '';
+  const ds = [...dates].sort(), a = ds[0], b = ds[ds.length - 1];
+  const D = x => Math.round((new Date(x + 'T00:00') - new Date('2000-01-01T00:00')) / 864e5);
+  if (today < a) return `距出发还有 ${D(a) - D(today)} 天`;
+  if (today > b) return '行程已结束';
+  return `旅途第 ${D(today) - D(a) + 1} 天 / 共 ${D(b) - D(a) + 1} 天`;
+}
+// 照片压缩后存在本机 IndexedDB(不进 localStorage,免得 5MB 额度被撑爆);行程里只记照片 id
+const IDB = {
+  db: null,
+  open() {
+    return this.db || (this.db = new Promise((res, rej) => {
+      const r = indexedDB.open('travel-split-photos', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('p');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }));
+  },
+  async run(mode, fn) {
+    const d = await this.open();
+    return new Promise((res, rej) => { const q = fn(d.transaction('p', mode).objectStore('p')); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+  },
+  get(id) { return this.run('readonly', st => st.get(id)); },
+  put(id, blob) { return this.run('readwrite', st => st.put(blob, id)); },
+  del(id) { return this.run('readwrite', st => st.delete(id)); },
+};
+const photoUrls = {};
+const PH_MISSING = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="76" height="76"><rect width="76" height="76" fill="#E6E3D9"/><text x="38" y="42" font-size="10" text-anchor="middle" fill="#8C8A80">其他设备</text></svg>');
+function compressImage(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? res(b) : rej(new Error('toBlob')), 'image/jpeg', .82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('load')); };
+    img.src = url;
+  });
+}
+function hydratePhotos() {
+  if (typeof document === 'undefined') return;
+  [...document.querySelectorAll('img[data-pid]')].forEach(async img => {
+    const id = img.dataset.pid;
+    try { if (!photoUrls[id]) { const b = await IDB.get(id); if (b) photoUrls[id] = URL.createObjectURL(b); } } catch {}
+    img.src = photoUrls[id] || PH_MISSING;
+  });
+}
+function blobToDataUrl(b) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
+async function restorePhotos(map) {
+  let n = 0;
+  for (const [id, url] of Object.entries(map || {})) {
+    try { await IDB.put(id, await (await fetch(url)).blob()); n++; } catch {}
+  }
+  if (n) render();
 }
 const fmtRate = r => r ? String(+r.toPrecision(5)) : '';
 // 换汇均价:累计付出的主币 ÷ 累计换到的外币 = 1 单位外币值多少主币
@@ -375,6 +460,17 @@ function avgRate(t, cur) {
   // 换汇:100.00 MYR→3000 JPY,200.00 MYR→6200 JPY,均价 = 300 / 9200
   const tx = { exchanges:[{toCur:'JPY', fromCents:10000, toAmount:3000},{toCur:'JPY', fromCents:20000, toAmount:6200}] };
   console.assert(Math.abs(avgRate(tx, 'JPY') - 300/9200) < 1e-12 && avgRate(tx, 'USD') === null, '换汇均价算错', tx);
+  // 出发倒计时 / 旅途第几天
+  const dts = ['2026-10-12', '2026-10-14'];
+  console.assert(tripStatus(dts, '2026-10-10') === '距出发还有 2 天' && tripStatus(dts, '2026-10-13') === '旅途第 2 天 / 共 3 天'
+    && tripStatus(dts, '2026-10-20') === '行程已结束' && tripStatus([], '2026-10-10') === '', '行程状态算错');
+  // 清单作为独立记录同步
+  const rt = tripToRecords({ id:'T', name:'n', currency:'MYR', members:[], expenses:[], stops:[], settlements:[], todos:[{id:'d1', text:'护照', done:false}] });
+  console.assert(rt.length === 2 && rt[1].kind === 'todo' && applyRemote({ todos:[] }, { id:'d1', kind:'todo', data:{id:'d1', text:'x'} }), '清单同步算错', rt);
+  // 按比例 70/30:100.00 → A 摊 70.00,B 摊 30.00(A 垫付)
+  const bp = computeBalances({ members:[{id:'A'},{id:'B'}], settlements:[], expenses:[
+    { payers:{A:10000}, participantIds:['A','B'], mainCents:10000, split:{type:'percent', values:{A:70,B:30}} }]});
+  console.assert(bp.A === 3000 && bp.B === -3000, '按比例分摊算错', bp);
 })();
 
 /* ============ V2 多人同步(Supabase) ============ */
@@ -388,7 +484,7 @@ const saveSync = () => localStorage.setItem(SS, JSON.stringify(sync));
 function tripToRecords(t) {
   const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency } }];
   const add = (kind, list) => (list || []).forEach(x => recs.push({ id:x.id, kind, data:x }));
-  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges);
+  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges); add('todo', t.todos);
   return recs;
 }
 function diffRecords(snap, t) {
@@ -581,12 +677,16 @@ async function fetchRate(f) {
     else alert(`查不到 ${cur} → ${main} 的汇率，手动填吧`);
   } catch { alert('汇率服务连不上（离线？），手动填吧'); }
 }
-function exportData() {
+async function exportData() {
   db.lastExportAt = Date.now(); save();
+  const ids = db.trips.flatMap(t => (t.stops || []).flatMap(s => s.photos || []));
+  const photos = {};
+  for (const id of ids) { try { const b = await IDB.get(id); if (b) photos[id] = await blobToDataUrl(b); } catch {} }
   const a = document.createElement('a');
   a.download = `旅行分账-备份-${new Date().toISOString().slice(0,10)}.json`;
-  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(db, null, 2));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ ...db, photos }, null, 2)], { type:'application/json' }));
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 function mergeTrips(trips, incoming) {
   let added = 0, replaced = 0;
@@ -610,7 +710,7 @@ function importData(ev) {
     const r = mergeTrips(db.trips, data.trips);
     migratePayers(db);
     migrateIds(db);
-    save(); render();
+    save(); render(); restorePhotos(data.photos);
     alert(`导入完成：新增 ${r.added} 个行程${r.replaced ? `，覆盖 ${r.replaced} 个` : ''}。`);
   });
 }
@@ -636,15 +736,19 @@ function setTab(tab)  { view.tab = tab; view.showForm = false; view.editId = '';
 function scrollToId(id) { requestAnimationFrame(() => requestAnimationFrame(() =>
   document.getElementById(id)?.scrollIntoView({ behavior:'smooth', block:'start' }))); }
 function toggleForm() {
-  view.showForm = !view.showForm; view.presetStopId = ''; view.editId = '';
+  view.showForm = !view.showForm; view.presetStopId = ''; view.editId = ''; view.dupId = '';
   render(); if (view.showForm) scrollToId('expense-form');
 }
 function openExpenseForm(stopId) {
-  view.showForm = true; view.presetStopId = stopId || ''; view.editId = '';
+  view.showForm = true; view.presetStopId = stopId || ''; view.editId = ''; view.dupId = '';
+  render(); scrollToId('expense-form');
+}
+function dupExpense(id) {
+  view.showForm = true; view.dupId = id; view.editId = ''; view.presetStopId = '';
   render(); scrollToId('expense-form');
 }
 function openEditExpense(id) {
-  view.showForm = true; view.editId = id; view.presetStopId = '';
+  view.showForm = true; view.editId = id; view.presetStopId = ''; view.dupId = '';
   render(); scrollToId('expense-form');
 }
 function toggleStopForm() {
@@ -690,17 +794,18 @@ function addExpense(ev) {
     split.values = {}; let sum = 0;
     for (const id of participantIds) { const v = parseFloat(f['sv-' + id].value) || 0; split.values[id] = v; sum += v; }
     if (split.type === 'shares' && !(sum > 0)) { alert('份数至少要有一个大于 0'); return; }
+    if (split.type === 'percent' && Math.round(sum * 100) !== 10000) { alert(`各人比例合计 ${sum}%，要等于 100%`); return; }
     if (split.type === 'amount' && Math.round(sum * 100) !== Math.round(amount * 100)) {
       alert(`各人金额合计 ${sum} 不等于总额 ${amount}`); return; }
   }
   const rec = { id: view.editId || uid(), desc: f.desc.value.trim() || f.cat.value, cat: f.cat.value, date: f.date.value,
     amount, currency: cur, rate, mainCents,
-    payers, participantIds, split, stopId: f.stop.value || null };
+    payers, participantIds, split, stopId: f.stop.value || null, pay: f.pay.value };
   const i = t.expenses.findIndex(x => x.id === rec.id);
   if (i >= 0) { rec.createdAt = t.expenses[i].createdAt; rec.editedAt = new Date().toISOString(); t.expenses[i] = rec; }
   else { rec.createdAt = new Date().toISOString(); t.expenses.push(rec); }
-  if (i < 0) t.last = { payerId: payerIds[0], currency: cur, rate, cat: rec.cat };
-  save(); view.showForm = false; view.presetStopId = ''; view.editId = ''; render();
+  if (i < 0) t.last = { payerId: payerIds[0], currency: cur, rate, cat: rec.cat, pay: rec.pay };
+  save(); view.showForm = false; view.presetStopId = ''; view.editId = ''; view.dupId = ''; render();
 }
 function payerToggle(f) {
   const multi = f.querySelectorAll('input[name=py]:checked').length > 1;
@@ -712,10 +817,71 @@ function addStop(ev) {
   const f = ev.target, name = f.sname.value.trim();
   if (!name) return;
   const t = trip(); t.stops = t.stops || [];
-  const rec = { id: view.editStopId || uid(), name, date: f.sdate.value, time: f.stime.value, note: f.snote.value.trim() };
-  const i = t.stops.findIndex(s => s.id === rec.id);
+  const i = t.stops.findIndex(s => s.id === view.editStopId);
+  const rec = { ...(i >= 0 ? t.stops[i] : {}), id: view.editStopId || uid(), name, date: f.sdate.value, time: f.stime.value,
+    note: f.snote.value.trim(), kind: f.skind.value };
   if (i >= 0) t.stops[i] = rec; else t.stops.push(rec);
   view.showStopForm = false; view.editStopId = ''; save(); render();
+}
+function keepScroll(fn) { const y = window.scrollY; fn(); window.scrollTo(0, y); }
+function toggleDone(id) {
+  const s = (trip().stops || []).find(x => x.id === id);
+  if (s) { s.done = !s.done; save(); keepScroll(render); }
+}
+function pickPhotos(stopId) {
+  const i = document.createElement('input');
+  i.type = 'file'; i.accept = 'image/*'; i.multiple = true;
+  i.onchange = () => addPhotos(stopId, [...i.files]);
+  i.click();
+}
+async function addPhotos(stopId, files) {
+  const s = (trip().stops || []).find(x => x.id === stopId);
+  if (!s || !files.length) return;
+  s.photos = s.photos || [];
+  const room = Math.max(0, PHOTO_MAX - s.photos.length);
+  let ok = 0, bad = 0;
+  for (const f of files.slice(0, room)) {
+    try { const b = await compressImage(f); const id = uid(); await IDB.put(id, b); s.photos.push(id); ok++; } catch { bad++; }
+  }
+  if (files.length > room) alert(`每条行程最多 ${PHOTO_MAX} 张，多出的没有加入`);
+  if (bad) alert(`${bad} 张没能加入（格式不支持，或手机存储空间不足）`);
+  if (ok) { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); save(); keepScroll(render); }
+}
+function openPhoto(stopId, pid) {
+  if (!photoUrls[pid]) { alert('这张照片是在另一台设备上添加的，照片只保存在添加它的那台手机里'); return; }
+  view.photo = { stopId, pid }; render();
+}
+function closePhoto() { view.photo = null; render(); }
+function stepPhoto(d) {
+  const s = (trip().stops || []).find(x => x.id === view.photo.stopId), ph = s.photos || [];
+  view.photo.pid = ph[(ph.indexOf(view.photo.pid) + d + ph.length) % ph.length]; render();
+}
+function delPhoto() {
+  if (!confirm('删除这张照片？')) return;
+  const s = (trip().stops || []).find(x => x.id === view.photo.stopId), pid = view.photo.pid;
+  s.photos = (s.photos || []).filter(x => x !== pid);
+  IDB.del(pid).catch(() => {}); delete photoUrls[pid];
+  view.photo = s.photos.length ? { stopId: s.id, pid: s.photos[0] } : null;
+  save(); render();
+}
+function addTodo(ev) {
+  ev.preventDefault();
+  const text = ev.target.ttext.value.trim();
+  if (!text) return;
+  const t = trip(); (t.todos = t.todos || []).push({ id: uid(), text, done: false });
+  view.todoOpen = true; save(); render();
+  const el = document.querySelector('input[name=ttext]'); if (el) el.focus();
+}
+function toggleTodo(id) {
+  const x = (trip().todos || []).find(x => x.id === id);
+  if (x) { x.done = !x.done; save(); keepScroll(render); }
+}
+function delTodo(id) { const t = trip(); t.todos = (t.todos || []).filter(x => x.id !== id); save(); keepScroll(render); }
+function seedTodos() {
+  const t = trip(); t.todos = t.todos || [];
+  ['护照 / 身份证','签证 / 入境卡','手机充电器 + 充电宝','转换插头','常用药品','雨具','现金 + 银行卡','保险单','洗漱用品','换洗衣物']
+    .forEach(text => t.todos.push({ id: uid(), text, done: false }));
+  view.todoOpen = true; save(); render();
 }
 function addExchange(ev) {
   ev.preventDefault();
@@ -776,9 +942,18 @@ function detachStop(t, id) {
   t.expenses.forEach(e => { if (e.stopId === id) e.stopId = null; });
 }
 function delStop(id) {
-  if (!confirm('删除这条行程安排？挂在上面的支出会保留，只是不再挂计划。')) return;
-  detachStop(trip(), id);
+  const t = trip(), s = (t.stops || []).find(x => x.id === id);
+  if (!confirm(`删除这条行程安排？${s && (s.photos || []).length ? '上面的照片会一起删除。' : ''}挂在上面的支出会保留，只是不再挂计划。`)) return;
+  detachStop(t, id);
+  ((s && s.photos) || []).forEach(pid => { IDB.del(pid).catch(() => {}); delete photoUrls[pid]; });
   save(); render();
+}
+function copySummary() {
+  const t = trip(), bal = computeBalances(t), plan = settleUp(bal);
+  const lines = [`【${t.name}】对账（${t.currency}）`, ...t.members.map(m => `${m.name}：${bal[m.id] >= 0 ? '+' : ''}${fmt(bal[m.id])}`)];
+  lines.push('', plan.length ? '转账建议：' : '已结清 ✓');
+  plan.forEach(p => lines.push(`${mname(t, p.from)} → ${mname(t, p.to)}  ${fmt(p.cents)}`));
+  navigator.clipboard.writeText(lines.join('\n')).then(() => alert('已复制，粘贴到群里即可'), () => alert('复制失败，请手动截图'));
 }
 function markPaid(from, to, cents) {
   const t = trip();
@@ -791,6 +966,7 @@ function render() {
   const body = view.screen === 'list' ? renderList() : view.screen === 'backup' ? renderBackup() : renderTrip();
   document.getElementById('app').innerHTML = body + bottomBar();
   if (view.showRecap) drawRecap();
+  hydratePhotos();
 }
 function goScreen(s) { view = { screen:s }; render(); }
 function bottomBar() {
@@ -809,7 +985,7 @@ function renderBackup() {
     <div class="eb">Backup</div>
     <h1>备份</h1>
     ${warn ? `<p class="muted" style="color:var(--clay)">${warn}</p>` : ''}
-    <p class="muted">账本只存在这台设备的浏览器里，清缓存会丢。定期导出 JSON 存好，或把文件发给同行的人，对方导入即可各留一份。</p>
+    <p class="muted">账本只存在这台设备的浏览器里，清缓存会丢。定期导出 JSON 存好，或把文件发给同行的人，对方导入即可各留一份。照片也会一起备份，照片多时文件会比较大；照片目前只存在添加它的那台手机里，换手机前务必先导出。</p>
   </div>
   <button class="cta" onclick="exportData()">导出备份</button>
   <button class="outline" style="width:100%;margin-top:12px" onclick="document.getElementById('imp').click()">导入备份</button>
@@ -882,7 +1058,8 @@ function renderTrip() {
   ${t.members.length && view.tab !== 'fx' ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
   ${view.showRecap ? recapOverlay() : ''}
   ${view.showInvite ? inviteOverlay(t) : ''}
-  ${view.showClaim ? claimOverlay(t) : ''}`;
+  ${view.showClaim ? claimOverlay(t) : ''}
+  ${view.photo ? photoOverlay(t) : ''}`;
 }
 function inviteOverlay(t) {
   return `<div class="overlay" onclick="if(event.target===this){view.showInvite=false;render()}">
@@ -919,10 +1096,13 @@ function renderPlan(t) {
   const days = [];
   stops.forEach(s => { const g = days[days.length - 1]; if (g && g.date === s.date) g.items.push(s); else days.push({ date: s.date, items: [s] }); });
   const es = view.editStopId ? stops.find(x => x.id === view.editStopId) : null;
+  const kind0 = (es && es.kind) || KINDS[0];
+  const status = tripStatus(stops.map(s => s.date).filter(Boolean), today);
+  const todos = t.todos || [], tdone = todos.filter(x => x.done).length;
   return `
   <div class="tl-head">
-    <h2 style="margin:0">旅行计划</h2>
-    <button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加行程'}</button>
+    <div><h2 style="margin:0">旅行计划</h2>${status ? `<div class="trip-date">${status}</div>` : ''}</div>
+    <div>${stops.length ? '<button class="ghost" onclick="window.print()">打印</button> ' : ''}<button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加行程'}</button></div>
   </div>
   ${view.showStopForm ? `
   <form class="surface" id="stop-form" onsubmit="addStop(event)" style="margin-top:12px">
@@ -932,26 +1112,62 @@ function renderPlan(t) {
       <div><label>时间(可选)</label><input name="stime" type="time" value="${es ? es.time || '' : ''}"></div>
     </div>
     <label>去哪里</label><input name="sname" placeholder="如 清水寺" value="${es ? esc(es.name) : ''}" required autofocus>
-    <label>备注(可选)</label><input name="snote" placeholder="订位、交通、要带什么…" value="${es ? esc(es.note || '') : ''}">
+    <label>类型</label>
+    <div class="checks">${KINDS.map(k => `<label><input type="radio" name="skind" value="${k}" ${k === kind0 ? 'checked' : ''}>${k}</label>`).join('')}</div>
+    <label>备注(可选)</label><input name="snote" placeholder="订位号、交通、要带什么…" value="${es ? esc(es.note || '') : ''}">
     <button class="cta" style="margin-top:16px">${es ? '保存修改' : '加入计划'}</button>
+    ${es ? '' : '<p class="muted" style="font-size:12px;margin-top:10px">加入后，在这一条下面点「＋ 照片」就能放照片。</p>'}
   </form>` : ''}
   ${days.map(g => {
     const n = Math.round((new Date(g.date) - new Date(first)) / 864e5) + 1;
     const wd = WD[new Date(g.date + 'T00:00').getDay()];
-    return `<div class="plan-day"><b>${+g.date.slice(5,7)}/${+g.date.slice(8,10)} 周${wd}${g.date === today ? ' · 今天' : ''}</b><span>Day ${n}</span></div>
+    const dn = g.items.filter(x => x.done).length;
+    return `<div class="plan-day"><b>${+g.date.slice(5,7)}/${+g.date.slice(8,10)} 周${wd}${g.date === today ? ' · 今天' : ''}</b><span>Day ${n}${dn ? ` · ${dn}/${g.items.length}` : ''}</span></div>
     ${g.items.map(s => {
       const spent = t.expenses.filter(e => e.stopId === s.id).reduce((x, e) => x + e.mainCents, 0);
-      return `<div class="plan-item">
+      const ph = s.photos || [];
+      return `<div class="plan-item ${s.done ? 'done' : ''}">
+        <button class="tick ${s.done ? 'on' : ''}" onclick="toggleDone('${s.id}')" aria-label="标记已去过"></button>
         <div class="pt num ${s.time ? '' : 'none'}">${s.time || '全天'}</div>
-        <div style="flex:1">
-          <div class="pn">${esc(s.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div class="pn">${s.kind ? `<span class="ptag">${esc(s.kind)}</span>` : ''}${esc(s.name)}</div>
           ${s.note ? `<div class="pm">${esc(s.note)}</div>` : ''}
           ${spent ? `<div class="pm">已花 ${t.currency} ${fmt(spent)}</div>` : ''}
+          <div class="pm"><a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(s.name)}" target="_blank" rel="noopener">在地图中打开</a></div>
+          ${ph.length ? `<div class="ph-grid">${ph.map(pid => `<img class="ph" data-pid="${pid}" alt="" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onclick="openPhoto('${s.id}','${pid}')">`).join('')}${ph.length < PHOTO_MAX ? `<button class="ph add" onclick="pickPhotos('${s.id}')" aria-label="加照片">＋</button>` : ''}</div>`
+            : `<button class="stop-add" onclick="pickPhotos('${s.id}')">＋ 照片</button>`}
         </div>
         <button class="icon-btn" onclick="openEditStop('${s.id}')">改</button>
         <button class="icon-btn" onclick="delStop('${s.id}')">×</button>
       </div>`; }).join('')}`;
-  }).join('') || '<p class="muted" style="margin-top:14px">还没有计划。把什么时间去哪里排进来，出发前后都能随时调整。</p>'}`;
+  }).join('') || '<p class="muted" style="margin-top:14px">还没有计划。把什么时间去哪里排进来，出发前后都能随时调整，每一条下面还能放照片。</p>'}
+  <details class="section" ${view.todoOpen ? 'open' : ''} ontoggle="view.todoOpen = this.open" style="margin-top:30px">
+    <summary>清单 · ${tdone}/${todos.length}</summary>
+    <div>
+      ${todos.map(x => `<div class="todo ${x.done ? 'done' : ''}"><label><input type="checkbox" ${x.done ? 'checked' : ''} onchange="toggleTodo('${x.id}')">${esc(x.text)}</label><button class="icon-btn" onclick="delTodo('${x.id}')">×</button></div>`).join('')}
+      <form class="row" onsubmit="addTodo(event)" style="margin-top:12px">
+        <input name="ttext" placeholder="打包、订票、待办…">
+        <button class="outline" style="flex:0 0 auto">添加</button>
+      </form>
+      ${todos.length ? '' : '<button class="ghost" style="margin-top:8px" onclick="seedTodos()">套用常用物品清单</button>'}
+    </div>
+  </details>`;
+}
+function photoOverlay(t) {
+  const s = (t.stops || []).find(x => x.id === view.photo.stopId);
+  if (!s) return '';
+  const ph = s.photos || [], i = ph.indexOf(view.photo.pid);
+  if (i < 0) return '';
+  const wb = 'style="color:#fff;border-color:rgba(255,255,255,.3)"';
+  return `<div class="overlay" onclick="if(event.target===this)closePhoto()">
+    <div class="lb-cap">${esc(s.name)} · ${i + 1}/${ph.length}</div>
+    <img class="lb-img" data-pid="${view.photo.pid}" alt="">
+    <div class="row" style="flex:0 0 auto">
+      ${ph.length > 1 ? `<button class="outline" ${wb} onclick="stepPhoto(-1)">‹</button>` : ''}
+      <button class="outline" ${wb} onclick="delPhoto()">删除</button>
+      <button class="outline" ${wb} onclick="closePhoto()">关闭</button>
+      ${ph.length > 1 ? `<button class="outline" ${wb} onclick="stepPhoto(1)">›</button>` : ''}
+    </div></div>`;
 }
 
 function renderFx(t) {
@@ -963,17 +1179,17 @@ function renderFx(t) {
     const list = ex.filter(x => x.toCur === c);
     const got = list.reduce((s, x) => s + x.toAmount, 0);
     const paid = list.reduce((s, x) => s + x.fromCents, 0);
-    const spent = Math.round(t.expenses.filter(e => e.currency === c).reduce((s, e) => s + e.amount, 0) * 100) / 100;
+    const spent = Math.round(t.expenses.filter(e => e.currency === c && (e.pay || 'cash') === 'cash').reduce((s, e) => s + e.amount, 0) * 100) / 100;
     return `<div class="surface fx-card">
       <div class="eb">${esc(c)} · 换汇均价</div>
       <div class="s2-title num">1 ${esc(c)} = ${fmtRate(avgRate(t, c))} ${esc(t.currency)}</div>
       <div style="margin-top:10px">
         ${lr('累计付出', `${t.currency} ${fmt(paid)}`)}
         ${lr('累计换入', `${c} ${+got.toFixed(2)}`)}
-        ${lr('已记账花费', `${c} ${spent}`)}
+        ${lr('现金已花', `${c} ${spent}`)}
         ${lr('约剩现金', `${c} ${+(got - spent).toFixed(2)}`)}
       </div>
-      <div class="muted" style="font-size:12px;margin-top:6px">约剩 = 换入 − 已记账花费，刷卡的不算，仅供参考。</div>
+      <div class="muted" style="font-size:12px;margin-top:6px">约剩 = 换入 − 记为「现金」的花费；刷卡 / 转账的不计入，仅供参考。</div>
     </div>`;
   }).join('');
   return `
@@ -1006,14 +1222,25 @@ function renderFx(t) {
       <button class="icon-btn" onclick="delExchange('${x.id}')">×</button>
     </div>`).join('')}` : ''}`;
 }
+function matchQ(t, e, q) {
+  q = (q || '').trim().toLowerCase();
+  if (!q) return true;
+  return [e.desc, e.cat, e.currency, ...Object.keys(e.payers).map(id => mname(t, id))].join(' ').toLowerCase().includes(q);
+}
+function setQ(v) {
+  view.q = v; render();
+  const el = document.getElementById('q');
+  if (el) { el.focus(); el.setSelectionRange(v.length, v.length); }
+}
 function setLedgerFilter(k, v) { (view.ledgerFilter = view.ledgerFilter || { cat:'', payer:'' })[k] = v; render(); }
 function renderLedger(t) {
   const lf = view.ledgerFilter || { cat:'', payer:'' };
-  const list = t.expenses.filter(e => (!lf.cat || e.cat === lf.cat) && (!lf.payer || lf.payer in e.payers));
+  const list = t.expenses.filter(e => (!lf.cat || e.cat === lf.cat) && (!lf.payer || lf.payer in e.payers) && matchQ(t, e, view.q));
   const groups = {};
   [...list].sort((a,b) => b.date.localeCompare(a.date)).forEach(e => (groups[e.date] = groups[e.date] || []).push(e));
   return `
   ${t.expenses.length ? `<div class="tl-head"><button class="ghost" onclick="exportCsv()">导出 CSV</button></div>
+  <input id="q" type="search" placeholder="搜索备注、类别、付款人" value="${esc(view.q || '')}" oninput="setQ(this.value)" style="margin-bottom:6px">
   <div class="row" style="margin-bottom:6px">
     <select onchange="setLedgerFilter('cat', this.value)"><option value="">全部类别</option>${CATS.map(c =>
       `<option ${lf.cat === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
@@ -1021,7 +1248,7 @@ function renderLedger(t) {
       `<option value="${m.id}" ${lf.payer === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
   </div>` : ''}
   <div class="tl-head">
-    <span class="muted">${lf.cat || lf.payer ? '筛选合计' : '总支出'} <b class="num" style="color:var(--ink)">${t.currency} ${fmt(list.reduce((s,e) => s+e.mainCents, 0))}</b></span>
+    <span class="muted">${lf.cat || lf.payer || view.q ? '筛选合计' : '总支出'} <b class="num" style="color:var(--ink)">${t.currency} ${fmt(list.reduce((s,e) => s+e.mainCents, 0))}</b></span>
   </div>
   ${Object.entries(groups).map(([date, list]) => `
     <div class="date-h">${date}</div>
@@ -1035,14 +1262,16 @@ function renderLedger(t) {
           <div class="main num">${t.currency} ${fmt(e.mainCents)}</div>
           ${e.currency !== t.currency ? `<div class="orig">${e.currency} ${e.amount}</div>` : ''}
         </div>
+        <button class="icon-btn" onclick="dupExpense('${e.id}')">复</button>
         <button class="icon-btn" onclick="openEditExpense('${e.id}')">改</button>
         <button class="icon-btn" onclick="delExpense('${e.id}')">×</button>
       </div>`).join('')}
-    `).join('') || `<p class="muted">${lf.cat || lf.payer ? '没有符合筛选的支出。' : '还没有支出。'}</p>`}`;
+    `).join('') || `<p class="muted">${lf.cat || lf.payer || view.q ? '没有符合筛选的支出。' : '还没有支出。'}</p>`}`;
 }
 
 function expenseForm(t) {
-  const e = view.editId ? t.expenses.find(x => x.id === view.editId) : null;
+  const e = view.editId ? t.expenses.find(x => x.id === view.editId) : view.dupId ? t.expenses.find(x => x.id === view.dupId) : null;
+  const isEdit = !!view.editId;
   const preset = e ? (e.stopId || '') : view.presetStopId;
   const last = t.last || {};
   const today = new Date().toISOString().slice(0, 10);
@@ -1062,12 +1291,13 @@ function expenseForm(t) {
   const multiPay = Object.keys(payers0).length > 1;
   const pv0 = id => multiPay && id in payers0 ? +(payers0[id] / (e.rate || 1) / 100).toFixed(2) : '';
   const cat0 = [e && e.cat, last.cat].find(c => CATS.includes(c)) || CATS[0];
-  const date0 = e ? e.date : today;
+  const date0 = isEdit ? e.date : today;
+  const pay0 = e ? (e.pay || 'cash') : (last.pay || 'cash');
   const sp = (e && e.split) || { type:'equal' };
   const svStyle = sp.type === 'equal' ? 'display:none' : '';
-  const dflt = e ? '' : `（${esc(mname(t, Object.keys(payers0)[0]))} 付 · 全员平分 · 今天）`;
+  const dflt = isEdit ? '' : `（${esc(mname(t, Object.keys(payers0)[0]))} 付 · 全员平分 · 今天）`;
   return `<form class="surface" id="expense-form" onsubmit="addExpense(event)" data-main="${esc(t.currency)}" data-rates='${esc(JSON.stringify(rates))}'>
-    <div class="eb">${e ? '编辑支出' : '记一笔'}</div>
+    <div class="eb">${isEdit ? '编辑支出' : e ? '再记一笔 · 复制自上一笔' : '记一笔'}</div>
     <div class="row" style="align-items:flex-end">
       <div style="flex:3"><input class="amt-in" name="amount" type="number" step="any" min="0" inputmode="decimal" placeholder="0.00" value="${e ? e.amount : ''}" required autofocus></div>
       <div style="flex:1.2"><input class="cur-in" name="cur" value="${esc(cur0)}" maxlength="5" oninput="setCur(this.form, this.value)"></div>
@@ -1081,7 +1311,7 @@ function expenseForm(t) {
     </div>
     <label>类别</label>
     <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${c}</label>`).join('')}</div>
-    <details class="section" ${e ? 'open' : ''} style="margin-top:18px">
+    <details class="section" ${isEdit ? 'open' : ''} style="margin-top:18px">
       <summary>更多选项${dflt}</summary>
       <div>
         <label>付款人(可多选合付，${esc(t.currency)} 以外按原币填各自付了多少)</label>
@@ -1094,8 +1324,11 @@ function expenseForm(t) {
         <select name="split" onchange="this.form.querySelectorAll('.sv:not(.pv)').forEach(x => x.style.display = this.value === 'equal' ? 'none' : '')">
           <option value="equal">平分</option>
           <option value="shares" ${sp.type === 'shares' ? 'selected' : ''}>按份数(如大人 2 份小孩 1 份)</option>
+          <option value="percent" ${sp.type === 'percent' ? 'selected' : ''}>按比例(各人百分比，合计 100)</option>
           <option value="amount" ${sp.type === 'amount' ? 'selected' : ''}>按金额(各人实际消费，${esc(t.currency)} 以外按原币填)</option>
         </select>
+        <label>支付方式(现金会从换汇的现金里扣)</label>
+        <div class="checks"><label><input type="radio" name="pay" value="cash" ${pay0 === 'cash' ? 'checked' : ''}>现金</label><label><input type="radio" name="pay" value="card" ${pay0 === 'card' ? 'checked' : ''}>刷卡 / 转账</label></div>
         <div class="row">
           <div><label>日期</label><input name="date" type="date" value="${date0}" required></div>
           <div><label>备注</label><input name="desc" placeholder="如 一兰拉面" value="${e ? esc(e.desc) : ''}"></div>
@@ -1105,7 +1338,7 @@ function expenseForm(t) {
           `<option value="${s.id}" ${s.id === preset ? 'selected' : ''}>${esc(s.date.slice(5))} ${esc(s.name)}</option>`).join('')}</select>
       </div>
     </details>
-    <button class="cta" style="margin-top:18px">${e ? '保存修改' : '保存'}</button>
+    <button class="cta" style="margin-top:18px">${isEdit ? '保存修改' : '保存'}</button>
   </form>`;
 }
 
@@ -1147,6 +1380,7 @@ function renderSettle(t) {
       <div class="t-actions"><button class="outline" onclick="markPaid('${p.from}','${p.to}',${p.cents})">标记已还</button></div>
     </div>`;
   }).join('')}
+  ${t.expenses.length ? `<button class="outline" style="width:100%;margin-top:18px" onclick="copySummary()">复制对账结果，发到群里</button>` : ''}
   ${t.expenses.length ? `
   <h2>钱花哪儿了</h2>
   <details class="section" open><summary>按类别<span></span></summary><div>${statRows(by(e => e.cat).sort((a, b) => b[1] - a[1]), t.currency)}</div></details>
