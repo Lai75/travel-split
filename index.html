@@ -390,6 +390,7 @@ const DICT = [
 ['总花费','Total spent'],['花费最高的一天','Biggest spending day'],['花得最多的类别','Top category'],['垫付最多','Most fronted'],['记得谢谢 TA','remember to thank them'],['保存分享卡片','Save share card'],['已 结 清','SETTLED'],
 ['切换白天/夜间','Switch light/dark'],['设置','Settings'],['外观','Appearance'],['跟随系统','Follow system'],['白天','Light'],['夜间','Dark'],['语言','Language'],['完成','Done'],
 ['主币金额','Main amount'],['原币金额','Original amount'],['参与人','Participants'],['地点','Place'],['付款人','Payer'],['汇率','Rate'],['外币','foreign currency'],['笔','items'],
+['编辑名称和日期','✎ Edit name and dates'],['编辑行程','Edit trip'],['开始日期','Start date'],['结束日期不能早于开始日期','End date cannot be before start date'],['结束日期','End date'],['不填日期时','If left blank'],['显示的是账目和计划里最早到最晚的日期','the range shown is the earliest to latest date in your expenses and plans'],
 ].sort((a, b) => b[0].length - a[0].length);
 const PUNCT = [['——',' — '],['，',', '],['。','. '],['：',': '],['；','; '],['（',' ('],['）',')'],['？','?'],['！','!'],['「','"'],['」','" '],['、',', '],['…','...'],['＋','+']];
 const trCache = new Map();
@@ -833,7 +834,7 @@ let sync = JSON.parse(localStorage.getItem(SS) || '{"outbox":[],"snap":{},"lastP
 const saveSync = () => localStorage.setItem(SS, JSON.stringify(sync));
 
 function tripToRecords(t) {
-  const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency, fundHolder:t.fundHolder || '' } }];
+  const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency, fundHolder:t.fundHolder || '', startDate:t.startDate || '', endDate:t.endDate || '' } }];
   const add = (kind, list) => (list || []).forEach(x => recs.push({ id:x.id, kind, data:x }));
   add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges); add('todo', t.todos); add('fund', t.fundIn);
   return recs;
@@ -849,8 +850,8 @@ function diffRecords(snap, t) {
 }
 function applyRemote(t, rec) {
   if (rec.kind === 'trip') {
-    if (rec.deleted || (t.name === rec.data.name && t.currency === rec.data.currency && (t.fundHolder || '') === (rec.data.fundHolder || ''))) return false;
-    t.name = rec.data.name; t.currency = rec.data.currency; t.fundHolder = rec.data.fundHolder || '';
+    if (rec.deleted || (t.name === rec.data.name && t.currency === rec.data.currency && (t.fundHolder || '') === (rec.data.fundHolder || '') && (t.startDate || '') === (rec.data.startDate || '') && (t.endDate || '') === (rec.data.endDate || ''))) return false;
+    t.name = rec.data.name; t.currency = rec.data.currency; t.fundHolder = rec.data.fundHolder || ''; t.startDate = rec.data.startDate || ''; t.endDate = rec.data.endDate || '';
     return true;
   }
   if (rec.deleted) {
@@ -940,7 +941,7 @@ async function syncTrip(tid) {
   flush();
 }
 function safeRender() { // 表单打开时不重绘,免得吃掉正在输入的内容;数据已落盘,下次操作自然刷新
-  if (view.showForm || view.showStopForm || view.showFxForm || view.showClaim) return;
+  if (view.showTripForm || view.showForm || view.showStopForm || view.showFxForm || view.showClaim) return;
   render();
 }
 async function shareTrip() {
@@ -1069,7 +1070,7 @@ function addTrip(ev) {
   ev.preventDefault();
   const f = ev.target, name = f.name.value.trim(), cur = f.cur.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!name || !cur) return;
-  const t = { id: uid(), name, currency: cur, members: [], expenses: [], settlements: [], stops: [], exchanges: [] };
+  const t = { id: uid(), name, currency: cur, startDate: f.sd.value, endDate: f.ed.value, members: [], expenses: [], settlements: [], stops: [], exchanges: [] };
   db.trips.unshift(t); save();
   view = { screen:'trip', tripId: t.id, tab:'plan', showForm:false };
   render();
@@ -1390,6 +1391,10 @@ function renderList() {
     <label>行程名称</label>
     <input name="name" placeholder="如 2026 日本五日游" required autofocus>
     <div class="row">
+      <div><label>开始日期(可选)</label><input name="sd" type="date"></div>
+      <div><label>结束日期(可选)</label><input name="ed" type="date"></div>
+    </div>
+    <div class="row">
       <div><label>主货币(结算用)</label><input name="cur" value="MYR" maxlength="5" required></div>
       <div style="flex:0 0 auto"><button class="cta" style="width:auto">创建</button></div>
     </div>
@@ -1398,7 +1403,7 @@ function renderList() {
 }
 
 function dateRange(t) {
-  const ds = [...t.expenses.map(e => e.date), ...(t.stops || []).map(s => s.date)].filter(Boolean).sort();
+  const ds = (t.startDate || t.endDate) ? [t.startDate, t.endDate || t.startDate].filter(Boolean).concat(t.startDate ? [] : [t.endDate]) : [...t.expenses.map(e => e.date), ...(t.stops || []).map(s => s.date)].filter(Boolean).sort();
   const f = d => `${+d.slice(5,7)}.${+d.slice(8,10)}`;
   return ds.length ? `${f(ds[0])} – ${f(ds[ds.length-1])} · ` : '';
 }
@@ -1415,7 +1420,8 @@ function renderTrip() {
   return `
   ${toolbar(`<button class="icon-btn" style="padding-left:0" onclick="goScreen('list')">← 所有行程</button>`)}
   <div class="topbar">
-    <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算${syncBadge(t)}</div></div>
+    <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算${syncBadge(t)}</div>
+      <button class="icon-btn" style="padding-left:0" onclick="toggleTripForm()">✎ 编辑名称和日期</button></div>
     <div class="avatars">${t.members.map((m, i) => `<span class="av a${i % 5}">${esc(m.name.slice(0,1).toUpperCase())}</span>`).join('')}</div>
   </div>
   <details class="section" ${t.members.length ? '' : 'open'} style="margin-top:14px">
@@ -1429,6 +1435,7 @@ function renderTrip() {
     <button class="ghost" onclick="shareTrip()" style="margin-top:8px">${t.shareCode ? '邀请链接' : '邀请同伴 · 开启多人同步'}</button></div>
   </details>
   ${statusChip(t)}
+  ${view.showTripForm ? tripForm(t) : ''}
   ${view.showForm ? expenseForm(t) : ''}
   ${body}
   ${t.members.length && view.tab !== 'fx' ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
@@ -1436,6 +1443,27 @@ function renderTrip() {
   ${view.showInvite ? inviteOverlay(t) : ''}
   ${view.showClaim ? claimOverlay(t) : ''}
   ${view.photo ? photoOverlay(t) : ''}`;
+}
+function tripForm(t) {
+  return `<form class="surface" id="trip-form" onsubmit="saveTrip(event)">
+    <div class="eb">编辑行程</div>
+    <label>行程名称</label><input name="name" value="${esc(t.name)}" required autofocus>
+    <div class="row">
+      <div><label>开始日期(可选)</label><input name="sd" type="date" value="${esc(t.startDate || '')}"></div>
+      <div><label>结束日期(可选)</label><input name="ed" type="date" value="${esc(t.endDate || '')}"></div>
+    </div>
+    <p class="muted" style="margin-top:8px">不填日期时，显示的是账目和计划里最早到最晚的日期。</p>
+    <div class="row" style="margin-top:16px"><button class="cta">保存修改</button><button type="button" class="outline" onclick="toggleTripForm()">收起</button></div>
+  </form>`;
+}
+function toggleTripForm() { view.showTripForm = !view.showTripForm; render(); if (view.showTripForm) scrollToId('trip-form'); }
+function saveTrip(ev) {
+  ev.preventDefault();
+  const f = ev.target, name = f.name.value.trim(), sd = f.sd.value, ed = f.ed.value;
+  if (!name) return;
+  if (sd && ed && ed < sd) { alert('结束日期不能早于开始日期'); return; }
+  const t = trip(); t.name = name; t.startDate = sd; t.endDate = ed;
+  view.showTripForm = false; save(); render();
 }
 function inviteOverlay(t) {
   return `<div class="overlay" onclick="if(event.target===this){view.showInvite=false;render()}">
