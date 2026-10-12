@@ -391,6 +391,7 @@ const DICT = [
 ['切换白天/夜间','Switch light/dark'],['设置','Settings'],['外观','Appearance'],['跟随系统','Follow system'],['白天','Light'],['夜间','Dark'],['语言','Language'],['完成','Done'],
 ['主币金额','Main amount'],['原币金额','Original amount'],['参与人','Participants'],['地点','Place'],['付款人','Payer'],['汇率','Rate'],['外币','foreign currency'],['笔','items'],
 ['编辑名称和日期','✎ Edit name and dates'],['编辑行程','Edit trip'],['开始日期','Start date'],['结束日期不能早于开始日期','End date cannot be before start date'],['结束日期','End date'],['不填日期时','If left blank'],['显示的是账目和计划里最早到最晚的日期','the range shown is the earliest to latest date in your expenses and plans'],
+['同一个名字可以在多台设备上认领','The same name can be claimed on several devices'],['切换我的身份','Switch my identity'],
 ].sort((a, b) => b[0].length - a[0].length);
 const PUNCT = [['——',' — '],['，',', '],['。','. '],['：',': '],['；','; '],['（',' ('],['）',')'],['？','?'],['！','!'],['「','"'],['」','" '],['、',', '],['…','...'],['＋','+']];
 const trCache = new Map();
@@ -982,7 +983,7 @@ async function joinByCode(code) {
 async function claimMember(id) {
   const t = trip(), m = t.members.find(x => x.id === id);
   const { data:{ user } } = await supa.auth.getUser();
-  if (user) m.userId = user.id;
+  if (user && !m.userId) m.userId = user.id;
   sync.me[t.id] = id; saveSync();
   view.showClaim = false; save(); render();
 }
@@ -1432,7 +1433,7 @@ function renderTrip() {
       <input name="mname" placeholder="成员名字，不用注册">
       <button class="outline" style="flex:0 0 auto">添加</button>
     </form>
-    <button class="ghost" onclick="shareTrip()" style="margin-top:8px">${t.shareCode ? '邀请链接' : '邀请同伴 · 开启多人同步'}</button></div>
+    ${t.shareCode ? `<button class="ghost" onclick="view.showClaim=true;render()" style="margin-top:8px">切换我的身份</button>` : ''}<button class="ghost" onclick="shareTrip()" style="margin-top:8px">${t.shareCode ? '邀请链接' : '邀请同伴 · 开启多人同步'}</button></div>
   </details>
   ${statusChip(t)}
   ${view.showTripForm ? tripForm(t) : ''}
@@ -1478,10 +1479,11 @@ function inviteOverlay(t) {
     </div></div>`;
 }
 function claimOverlay(t) {
-  const un = t.members.filter(m => !m.userId);
-  return `<div class="overlay">
+  const un = t.members;
+  return `<div class="overlay" onclick="if(event.target===this&&sync.me[trip().id]){view.showClaim=false;render()}">
     <div class="surface" style="width:min(340px,92vw)">
       <div class="eb">你是谁？</div>
+      <p class="muted" style="margin-top:8px">同一个名字可以在多台设备上认领。</p>
       <p class="muted" style="margin-top:8px">认领身份后，这台设备记账时付款人默认是你。</p>
       <div class="checks" style="margin-top:12px">${un.map(m =>
         `<label onclick="claimMember('${m.id}')" style="cursor:pointer">${esc(m.name)}</label>`).join('') || '<span class="muted">成员都已被认领——填你的名字加入</span>'}</div>
