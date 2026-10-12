@@ -2,9 +2,12 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#EEF0F7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0E0E16" media="(prefers-color-scheme: dark)">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEF0F7" id="tc">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script>try{var _t=localStorage.getItem('travel-split-theme');if(_t==='light'||_t==='dark')document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>旅行分账</title>
@@ -27,7 +30,7 @@
     --mono: ui-monospace,'SF Mono',Consolas,Menlo,monospace;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg:#0E0E16; --surface:#1A1A27; --field:#242435;
       --ink:#F3F3FA; --sub:#9A9CB6; --faint:#4A4B63; --line:#2C2C40;
       --brand:#7068FF; --brand-soft:#2B2A55; --accent:#8F89FF; --accent-ink:#A9A4FF;
@@ -35,6 +38,14 @@
       --pos-ink:#C6F432; --neg-ink:#FF8FB1; --clay:#FF8FB1; --sage:#C6F432;
       --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -14px rgba(0,0,0,.6);
     }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0E0E16; --surface:#1A1A27; --field:#242435;
+    --ink:#F3F3FA; --sub:#9A9CB6; --faint:#4A4B63; --line:#2C2C40;
+    --brand:#7068FF; --brand-soft:#2B2A55; --accent:#8F89FF; --accent-ink:#A9A4FF;
+    --lime-soft:#2C3510; --pink-soft:#3D1F2B; --sun-soft:#3A3213; --sky-soft:#17303F;
+    --pos-ink:#C6F432; --neg-ink:#FF8FB1; --clay:#FF8FB1; --sage:#C6F432;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -14px rgba(0,0,0,.6);
   }
   * { box-sizing:border-box; margin:0; }
   body { font-family:var(--font); background:var(--bg); color:var(--ink); min-height:100vh;
@@ -241,6 +252,37 @@
   .fund-card .eb { display:flex; align-items:center; gap:4px; }
   .fund-bar { height:10px; background:var(--surface); border-radius:99px; overflow:hidden; margin:14px 0; }
   .fund-bar i { display:block; height:100%; background:var(--brand); border-radius:99px; min-width:0; }
+  /* ===== 手机适配 / 手动主题 ===== */
+  :root { color-scheme:light; }
+  :root[data-theme="dark"] { color-scheme:dark; }
+  html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  body { min-height:100vh; min-height:100dvh; overscroll-behavior-y:none; touch-action:manipulation; overflow-wrap:anywhere; }
+  #app { padding:calc(10px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(150px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; gap:8px; min-height:44px; margin-bottom:8px; }
+  .tools { display:flex; gap:8px; margin-left:auto; }
+  .tool-btn { width:40px; height:40px; padding:0; border-radius:50%; background:var(--surface); box-shadow:var(--shadow); font-size:18px; line-height:1; }
+  :where(input:not([type=checkbox]):not([type=radio]):not([type=file]), select) { font-size:16px; min-height:46px; }
+  input[type=date], input[type=time], input[type=search] { -webkit-appearance:none; appearance:none; }
+  .sv { font-size:16px; min-height:38px; width:64px; }
+  .icon-btn { min-height:40px; min-width:36px; }
+  .tag .icon-btn, .t-meta .icon-btn { min-height:32px; min-width:30px; }
+  .chip { padding:10px 16px; }
+  .checks label { min-height:40px; }
+  .tick { position:relative; }
+  .tick::before { content:''; position:absolute; inset:-10px; }
+  .overlay { justify-content:safe center; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
+    padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
+  .lb-img { max-height:70vh; max-height:70dvh; }
+  .exp-row > .icon-btn:first-of-type { margin-left:auto; }
+  @media (max-width:480px) {
+    h1 { font-size:26px; } .hero h1 { font-size:30px; }
+    .surface { padding:16px; border-radius:22px; }
+    .amt-in { font-size:32px; }
+    .exp-row { flex-wrap:wrap; row-gap:2px; }
+    .exp-row > div[style*="flex:1"] { min-width:50% !important; }
+  }
+  @media (max-width:360px) { .row { flex-wrap:wrap; } .row > * { min-width:110px; } }
+  @media print { .toolbar { display:none; } }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   @media print {
     body { background:#fff; color:#000; }
@@ -256,6 +298,117 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 'use strict';
+/* ============ 语言 / 翻译:中文为源语言,界面渲染后按词典译成 English(数据和算法不受影响) ============ */
+const LK = 'travel-split-lang', TK = 'travel-split-theme';
+let LANG = 'zh';
+try { LANG = localStorage.getItem(LK) === 'en' ? 'en' : 'zh'; } catch {}
+const CJK = /[\u3000-\u303f\u3400-\u9fff\uff00-\uffef]/;
+const EXACT = { '改':'Edit', '复':'Copy', '天':'Days' };
+const RX = [
+  [/距出发还有 (\d+) 天/, '$1 days until departure'], [/旅途第 (\d+) 天 \/ 共 (\d+) 天/, 'Day $1 of $2'],
+  [/尚有 (\d+) 笔转账，即可结清/, '$1 transfer(s) left to settle up'], [/最少转账 · (\d+) 笔/, 'Fewest transfers · $1'],
+  [/逐笔还给垫付的人 · (\d+) 笔/, 'Pay back each payer · $1'], [/转账建议 · 最少 (\d+) 笔/, 'Suggested transfers · fewest, $1'],
+  [/转账清单 (\d+) 笔/, 'Transfer list · $1'], [/查看明细 · (\d+) 笔/, 'View details · $1'], [/共 (\d+) 笔/, '$1 items'],
+  [/^有 (\d+) 个行程本机已存在/, '$1 trip(s) already exist on this device'], [/新增 (\d+) 个行程/, 'added $1 trip(s)'], [/覆盖 (\d+) 个/, 'replaced $1'],
+  [/该成员已有 (\d+) 笔相关记录/, 'This member already has $1 related records'], [/每条行程最多 (\d+) 张/, 'Max $1 photos per stop'],
+  [/(\d+) 张没能加入/, '$1 photo(s) could not be added'],
+  [/有 (\d+) 笔现金支出的汇率和你换汇时的不一致/, '$1 cash expense(s) use a rate different from your exchange rate'],
+  [/按换汇汇率重算这 (\d+) 笔/, 'Recalculate these $1 at the exchange rate'], [/将按换汇汇率重算 (\d+) 笔/, 'Will recalculate $1'],
+  [/（多 /, '(up '], [/（少 /, '(down '], [/ 剩 /, ' left '],
+  [/([A-Z]{2,5}) 以外按原币填各自付了多少/, 'for currencies other than $1, enter each amount in the original currency'],
+  [/([A-Z]{2,5}) 以外按原币填/, 'for currencies other than $1, enter in the original currency'],
+];
+const DICT = [
+['旅行分账','Trip Split'],['出发、记账，到家前就结清','Set off, log expenses, settle up before you get home'],['新建一趟行程','New trip'],['新建行程','New trip'],
+['行程名称','Trip name'],['如 2026 日本五日游','e.g. 2026 Japan 5-day trip'],['主货币','Main currency'],['结算用','for settling'],['创建','Create'],['删除','Delete'],
+['人同行','travelers'],['笔支出','expenses'],['结算','settlement'],['条待同步','pending sync'],['已同步','Synced'],['所有行程','All trips'],
+['计划','Plan'],['流水','Ledger'],['钱包','Wallet'],['对账','Settle'],['行程','Trips'],['备份','Backup'],['站点','Stops'],
+['成员名字','Member name'],['不用注册','no sign-up needed'],['先添加成员','Add members first'],['先加成员','Add members first'],['成员都已被认领','All members have been claimed'],
+['填你的名字加入','enter your name to join'],['填你的名字','enter your name'],['都不是','None of these'],['移除成员','Remove member'],['已有同名成员','A member with that name already exists'],
+['如果那就是你','if that is you'],['点名字认领','tap your name to claim it'],['成员','Members'],['邀请同伴','Invite companions'],['开启多人同步','enable multi-user sync'],['邀请链接','Invite link'],
+['发这个链接给同行的人','Send this link to your travel companions'],['点开即入','open it to join'],['复制链接','Copy link'],['关闭','Close'],['你是谁','Who are you'],
+['认领身份后','After you claim your identity'],['这台设备记账时付款人默认是你','this device will default the payer to you'],['加入计划','Add to plan'],['加入后','After adding'],['加入','Join'],
+['已结清','Settled'],['圆满收官','All wrapped up'],['行程已结束','Trip ended'],['笔待结','transfers pending'],['尚有','Still'],
+['账本只存在这台设备的浏览器里','Your ledger is stored only in this device\'s browser'],['清缓存会丢','clearing the cache erases it'],['定期导出 JSON 存好','Export a JSON file regularly and keep it safe'],
+['或把文件发给同行的人','or send the file to your companions'],['对方导入即可各留一份','they can import it so everyone keeps a copy'],['照片也会一起备份','Photos are backed up too'],
+['照片多时文件会比较大','the file gets large with many photos'],['照片目前只存在添加它的那台手机里','photos currently live only on the phone that added them'],['换手机前务必先导出','always export before switching phones'],
+['还没备份过','You have not backed up yet'],['建议现在导出一份','export one now'],['上次备份是','Last backup was'],['天前','days ago'],['导出备份','Export backup'],['导入备份','Import backup'],
+['不是有效的 JSON 文件','Not a valid JSON file'],['文件里没有行程数据','No trip data in this file'],['个行程本机已存在','trip(s) already exist on this device'],['导入会用文件里的版本覆盖它们','importing will overwrite them with the file version'],
+['继续','Continue'],['导入完成','Import complete'],['个行程','trip(s)'],
+['删除行程','Delete trip'],['账目会一起删除','all entries will be deleted too'],['不可恢复','this cannot be undone'],['只删本机副本','only your local copy is deleted'],['同伴那份还在','your companions keep theirs'],
+['删除这笔支出','Delete this expense'],['删除这张照片','Delete this photo'],['删除这条存入记录','Delete this deposit record'],['删除这条换汇记录','Delete this exchange record'],['已记的支出汇率不受影响','rates on logged expenses are unaffected'],
+['删除这条行程安排','Delete this stop'],['上面的照片会一起删除','its photos will be deleted too'],['挂在上面的支出会保留','expenses attached to it are kept'],['只是不再挂计划','they just detach from the plan'],
+['无法直接删除','it cannot be deleted directly'],['建议改用重命名','consider renaming instead'],['或先处理这些记录','or deal with those records first'],['新名字','New name'],
+['还没设置共同基金的保管人','No holder set for the shared fund'],['金额要大于 0','Amount must be greater than 0'],['汇率要大于 0','Rate must be greater than 0'],['至少选一个参与人','Pick at least one participant'],
+['至少选一个付款人','Pick at least one payer'],['各付款人金额合计','Payers\' amounts total'],['不等于总额','does not equal the total'],['份数至少要有一个大于 0','At least one share must be above 0'],
+['各人比例合计','Percentages total'],['要等于','must equal'],['各人金额合计','Amounts total'],['基金已经有记录','The fund already has records'],['不能换保管人','the holder cannot be changed'],
+['付出和换得的金额都要大于 0','Paid and received amounts must both be above 0'],['换入货币要和主货币','Target currency must differ from the main currency'],['不同',''],['没有需要重算的账','Nothing to recalculate'],
+['现金支出','cash expenses'],['合计','Total'],['建议先在「备份」页导出一份','Export a backup first from the Backup page'],
+['今日汇率','Today\'s rate'],['仅供参考','for reference only'],['现金支出建议用你换汇时的汇率','for cash expenses, use the rate from when you exchanged'],['查不到','Could not find'],['的汇率',' rate'],['手动填吧','enter it manually'],
+['汇率服务连不上','Exchange-rate service unreachable'],['离线','offline'],['查今日汇率','Check today\'s rate'],['仅参考','reference only'],
+['还没配置同步','Sync is not set up'],['把文件顶部 SUPA_URL / SUPA_KEY 填上即可启用','fill in SUPA_URL / SUPA_KEY at the top of the file to enable it'],['无法通过邀请链接加入','cannot join via invite link'],
+['连接失败','Connection failed'],['稍后再试','try again later'],['分享失败','Share failed'],['邀请码无效','Invalid invite code'],['链接已复制','Link copied'],['发给同伴吧','send it to your companions'],
+['已复制','Copied'],['粘贴到群里即可','paste it into your group chat'],['复制失败','Copy failed'],['请手动截图','please take a screenshot instead'],
+['多出的没有加入','the extras were not added'],['格式不支持','unsupported format'],['或手机存储空间不足','or phone storage is full'],['这张照片是在另一台设备上添加的','This photo was added on another device'],
+['照片只保存在添加它的那台手机里','photos are stored only on the phone that added them'],
+['旅行计划','Travel plan'],['打印','Print'],['加行程','Add stop'],['收起表单','Hide form'],['收起','Collapse'],['修改行程','Edit stop'],['什么时间去哪里','When and where'],['日期','Date'],['时间','Time'],['可选','optional'],
+['去哪里','Where to'],['如 清水寺','e.g. Kiyomizu-dera'],['类型','Type'],['景点','Sights'],['美食','Food'],['住宿','Lodging'],['交通','Transport'],['其他','Other'],['备注','Note'],
+['订位号、交通、要带什么…','Booking no., transport, what to bring…'],['保存修改','Save changes'],['在这一条下面点「＋ 照片」就能放照片','tap "+ Photo" under an entry to add photos'],['＋ 照片','+ Photo'],['照片','photos'],
+['全天','All day'],['标记已去过','Mark as visited'],['已花','Spent'],['在地图中打开','Open in Maps'],['加照片','Add photo'],['还没有计划','No plans yet'],['把什么时间去哪里排进来','Add when and where you are going'],
+['出发前后都能随时调整','adjust anytime before or during the trip'],['每一条下面还能放照片','and each entry can hold photos'],['今天','Today'],['清单','Checklist'],['打包、订票、待办…','Packing, tickets, to-dos…'],['添加','Add'],
+['套用常用物品清单','Use the common packing list'],['护照 / 身份证','Passport / ID'],['签证 / 入境卡','Visa / arrival card'],['手机充电器 + 充电宝','Phone charger + power bank'],['转换插头','Travel adapter'],['常用药品','Medication'],
+['雨具','Rain gear'],['现金 + 银行卡','Cash + bank cards'],['保险单','Insurance policy'],['洗漱用品','Toiletries'],['换洗衣物','Change of clothes'],
+['周日','Sun'],['周一','Mon'],['周二','Tue'],['周三','Wed'],['周四','Thu'],['周五','Fri'],['周六','Sat'],
+['现金账','Cash wallets'],['每个人手上还有多少外币现金','How much foreign cash each person still holds'],['自己换的','what they exchanged'],['减去记账花掉的现金和存进基金的','minus cash spent on logged expenses and deposited into the fund'],
+['刷卡不算','card payments excluded'],['（我）',' (me)'],['未指定','Unassigned'],['是没记是谁换的钱','means nobody was recorded as the exchanger'],['在下面历次换汇里点「改」补上是谁换的','tap Edit in the exchange history below to fill in who exchanged'],
+['现金账才准','so the cash wallets stay accurate'],['出现红色负数','Red negatives appear'],['说明记账花掉的现金比换进来的多','meaning more cash was spent than exchanged'],['可能漏记了一次换汇','you may have missed logging an exchange'],
+['还没有换汇记录','No exchange records yet'],['在下面「记一次换汇」','Use "Log an exchange" below'],['选好是谁换的','choose who exchanged'],['这里就会显示每个人手上有多少外币','and each person\'s foreign cash shows up here'],
+['共同基金','Shared fund'],['大家出钱放一起','Everyone chips in'],['公共开销从这里扣','shared costs are paid from it'],['先选一个人来保管这笔钱','First pick someone to hold the money'],['之后记账时勾选「从共同基金出」','afterwards tick "Paid from shared fund" when logging'],
+['就记在基金名下','and it is recorded under the fund'],['并统计用了多少','tracking how much is used'],['还剩多少','and how much is left'],['保管人','Holder'],['开启共同基金','Enable shared fund'],['保管','holding'],['换人','Change'],
+['剩余','Left'],['已存入','Deposited'],['已用','Used'],['基金手上的现金','Cash held by the fund'],['存入基金','Deposit to fund'],['谁存的','Deposited by'],['金额','Amount'],['货币','Currency'],['汇率 1 外币','Rate: 1 foreign unit'],
+['如 出发前每人先存 200','e.g. everyone deposits 200 before departure'],['保存换汇','Save exchange'],['保存','Save'],['存入记录','Deposit records'],['存入','deposited'],['公款用在哪了','Where the fund went'],
+['还没有公款支出','No fund spending yet'],['记账时勾选「从共同基金出」即可','just tick "Paid from shared fund" when logging'],['从共同基金出','Paid from shared fund'],
+['换汇记录','Exchange log'],['记一次换汇','Log an exchange'],['什么时候换的钱','When did you exchange?'],['修改换汇','Edit exchange'],['谁换的','Exchanged by'],['哪天换的','Date exchanged'],['就选当时那天','pick the actual day'],
+['付出','Paid'],['换得','Received'],['汇率:1','Rate: 1'],['填好两个金额','Fill in both amounts'],['自动算出汇率','the rate is calculated automatically'],['如 跟小明换的 / 机场柜台','e.g. exchanged with a friend / airport counter'],
+['记下每次换钱的日期和实际汇率','Record the date and actual rate of each exchange'],['之后用这种外币记账时','when you log expenses in that currency later'],['汇率自动用你的换汇均价','the rate defaults to your average exchange rate'],
+['换汇均价','Avg exchange rate'],['累计付出','Total paid'],['累计换入','Total received'],['现金已花','Cash spent'],['全员约剩现金','Est. cash left (all)'],['约剩','Est. left'],['换入','received'],['记为「现金」的花费','spending marked as "cash"'],
+['刷卡 / 转账的不计入','card / transfer payments are excluded'],['新记的现金支出按「先换先花」取你换汇时的汇率','new cash expenses use your exchange rate, "first exchanged, first spent"'],['已记的现金支出汇率都和换汇一致','All logged cash expenses match your exchange rates'],['历次换汇','Exchange history'],
+['导出 CSV','Export CSV'],['搜索备注、类别、付款人','Search note, category, payer'],['全部类别','All categories'],['全部付款人','All payers'],['筛选合计','Filtered total'],['总支出','Total spent'],['付 · ',' paid · '],
+['全员平分','split equally among all'],['全员','everyone'],['分摊',' split'],['公款','Fund'],['编辑于','edited'],['没有符合筛选的支出','No expenses match the filter'],['还没有支出','No expenses yet'],
+['餐饮','Dining'],['门票','Tickets'],['购物','Shopping'],['记一笔','Add expense'],['编辑支出','Edit expense'],['再记一笔','Add another'],['复制自上一笔','copied from the previous one'],['用我的换汇汇率','Use my exchange rate'],
+['类别','Category'],['更多选项','More options'],['付款人','Payer'],['可多选合付','multiple payers allowed'],['参与人','Participants'],['默认全员','default: everyone'],['分法','Split method'],['平分','Equal'],['按份数','By shares'],
+['如大人 2 份小孩 1 份','e.g. adult 2 shares, child 1 share'],['按比例','By percentage'],['各人百分比','each person\'s percentage'],['合计 100','total 100'],['按金额','By amount'],['各人实际消费','each person\'s actual spending'],
+['支付方式','Payment method'],['现金会从换汇的现金里扣','cash is deducted from exchanged cash'],['现金','Cash'],['刷卡 / 转账','Card / transfer'],['如 一兰拉面','e.g. Ichiran ramen'],['挂在行程','Attach to stop'],['不挂','None'],
+['已锁定为记账时的汇率','Locked to the rate when logged'],['想改成换汇汇率','to switch to your exchange rate'],['点下面「用我的换汇汇率」','tap "Use my exchange rate" below'],['按你换汇时的汇率','Using the rate from your exchange'],
+['先换先花','first exchanged, first spent'],['可改','editable'],['沿用上次','Reusing the last rate'],['没有换汇记录','No exchange record'],['请手填','please enter it manually'],['按这个人换汇时的汇率','Using this person\'s exchange rate'],
+['回国前','Before heading home'],['理清这本账','settle up this ledger'],['每一笔账','For every expense'],['谁垫的钱就还给谁','pay back whoever fronted the money'],['两个人之间互相欠的会先抵扣','mutual debts between two people are netted first'],
+['笔数可能比「最少转账」多','there may be more transfers than "Fewest transfers"'],['但每笔都能对上具体的账','but each one traces back to specific expenses'],['先算出每人净余额','Net balances are computed first'],
+['再用最少的转账笔数互相抵扣','then offset with the fewest transfers'],['所以每笔转账不一定对应某一张小票','so a transfer may not map to a single receipt'],['明细仅列直接相关的账','details list only directly related expenses'],
+['经多人互相抵扣后为','After netting among several people it is'],['两人互相抵扣后为','After netting between the two it is'],['来自共同基金的存入，或两人之间互相抵扣','From fund deposits, or netting between two people'],['由多人债务互相抵扣而来','Results from netting debts among several people'],
+['标记已还','Mark as paid'],['确认','Confirm'],['已转给','has paid'],['复制对账结果，发到群里','Copy settlement, post to group chat'],['钱花哪儿了','Where the money went'],['按类别','By category'],['按天','By day'],
+['按人 · 应摊消费','By person · share of spending'],['按人 · 垫付','By person · fronted'],['生成回忆卡','Create memory card'],['已还记录','Payment records'],['转账建议：','Suggested transfers:'],['对账（','Settlement ('],
+['总花费','Total spent'],['花费最高的一天','Biggest spending day'],['花得最多的类别','Top category'],['垫付最多','Most fronted'],['记得谢谢 TA','remember to thank them'],['保存分享卡片','Save share card'],['已 结 清','SETTLED'],
+['切换白天/夜间','Switch light/dark'],['设置','Settings'],['外观','Appearance'],['跟随系统','Follow system'],['白天','Light'],['夜间','Dark'],['语言','Language'],['完成','Done'],
+['主币金额','Main amount'],['原币金额','Original amount'],['参与人','Participants'],['地点','Place'],['付款人','Payer'],['汇率','Rate'],['外币','foreign currency'],['笔','items'],
+].sort((a, b) => b[0].length - a[0].length);
+const PUNCT = [['——',' — '],['，',', '],['。','. '],['：',': '],['；','; '],['（',' ('],['）',')'],['？','?'],['！','!'],['「','"'],['」','" '],['、',', '],['…','...'],['＋','+']];
+const trCache = new Map();
+function tr(s) {
+  if (LANG === 'zh' || typeof s !== 'string' || !CJK.test(s)) return s;
+  const hit = trCache.get(s); if (hit !== undefined) return hit;
+  const m = s.match(/^(\s*)([\s\S]*?)(\s*)$/);
+  let x = m[2];
+  if (EXACT[x]) x = EXACT[x];
+  else {
+    for (const [re, to] of RX) x = x.replace(re, to);
+    for (const [zh, en] of DICT) if (x.includes(zh)) x = x.split(zh).join(en);
+    for (const [a, b] of PUNCT) x = x.split(a).join(b);
+    x = x.replace(/([A-Za-z])\(/g, '$1 (').replace(/ {2,}/g, ' ').replace(/ ([,.?!:;)])/g, '$1').replace(/" ([,.?!:;])/g, '"$1').trim();
+  }
+  const out = m[1] + x + m[3];
+  if (trCache.size > 3000) trCache.clear();
+  trCache.set(s, out); return out;
+}
 const LS = 'travel-split-v1';
 let db = JSON.parse(localStorage.getItem(LS) || '{"trips":[]}');
 function migratePayers(db) {
@@ -853,12 +1006,12 @@ function csvCell(s) { s = String(s); return /[",\n]/.test(s) ? '"' + s.replace(/
 function tripCsv(t) {
   const head = ['日期','备注','类别','原币金额','货币','汇率',`主币金额(${t.currency})`,'付款人','参与人','地点'];
   const rows = [...t.expenses].sort((a,b) => a.date.localeCompare(b.date)).map(e => [
-    e.date, e.desc, e.cat, e.amount, e.currency, e.rate, fmt(e.mainCents),
-    e.fromFund ? `公款 ${fmt(e.mainCents)}` : Object.entries(e.payers).map(([id,c]) => `${mname(t,id)} ${fmt(c)}`).join('；'),
+    e.date, e.desc, tr(e.cat), e.amount, e.currency, e.rate, fmt(e.mainCents),
+    e.fromFund ? tr(`公款 ${fmt(e.mainCents)}`) : Object.entries(e.payers).map(([id,c]) => `${mname(t,id)} ${fmt(c)}`).join('；'),
     e.participantIds.map(id => mname(t,id)).join('、'),
     e.stopId ? (((t.stops || []).find(s => s.id === e.stopId)) || {name:''}).name : ''
   ]);
-  return '\uFEFF' + [head, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n'); // BOM 让 Excel 认出 UTF-8
+  return '\uFEFF' + [head.map(tr), ...rows].map(r => r.map(csvCell).join(',')).join('\r\n'); // BOM 让 Excel 认出 UTF-8
 }
 function exportCsv() {
   const a = document.createElement('a');
@@ -1176,7 +1329,7 @@ function copySummary() {
   const lines = [`【${t.name}】对账（${t.currency}）`, ...t.members.map(m => `${m.name}：${bal[m.id] >= 0 ? '+' : ''}${fmt(bal[m.id])}`)];
   lines.push('', plan.length ? '转账建议：' : '已结清 ✓');
   plan.forEach(p => lines.push(`${mname(t, p.from)} → ${mname(t, p.to)}  ${fmt(p.cents)}`));
-  navigator.clipboard.writeText(lines.join('\n')).then(() => alert('已复制，粘贴到群里即可'), () => alert('复制失败，请手动截图'));
+  navigator.clipboard.writeText(lines.map(tr).join('\n')).then(() => alert('已复制，粘贴到群里即可'), () => alert('复制失败，请手动截图'));
 }
 function markPaid(from, to, cents) {
   const t = trip();
@@ -1186,7 +1339,7 @@ function markPaid(from, to, cents) {
 }
 
 function render() {
-  const body = view.screen === 'list' ? renderList() : view.screen === 'backup' ? renderBackup() : renderTrip();
+  const body = view.screen === 'list' ? toolbar() + renderList() : view.screen === 'backup' ? toolbar() + renderBackup() : renderTrip();
   document.getElementById('app').innerHTML = body + bottomBar();
   if (view.showRecap) drawRecap();
   hydratePhotos();
@@ -1260,7 +1413,7 @@ function renderTrip() {
   const t = trip();
   const body = ({ plan:renderPlan, ledger:renderLedger, fx:renderFx, settle:renderSettle })[view.tab](t);
   return `
-  <button class="icon-btn" style="padding-left:0;margin-bottom:6px" onclick="goScreen('list')">← 所有行程</button>
+  ${toolbar(`<button class="icon-btn" style="padding-left:0" onclick="goScreen('list')">← 所有行程</button>`)}
   <div class="topbar">
     <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算${syncBadge(t)}</div></div>
     <div class="avatars">${t.members.map((m, i) => `<span class="av a${i % 5}">${esc(m.name.slice(0,1).toUpperCase())}</span>`).join('')}</div>
@@ -1765,7 +1918,7 @@ function recapOverlay() {
       <div class="recap-stats">
         <div class="stat-box"><div class="stat-num">${s.days}</div><div class="stat-lb">天</div></div>
         <div class="stat-box"><div class="stat-num">${t.expenses.length}</div><div class="stat-lb">笔支出</div></div>
-        <div class="stat-box"><div class="stat-num">${(t.stops || []).length}</div><div class="stat-lb">行程</div></div>
+        <div class="stat-box"><div class="stat-num">${(t.stops || []).length}</div><div class="stat-lb">站点</div></div>
       </div>
       <div class="recap-total">总花费<b>${t.currency} ${fmt(s.total)}</b></div>
       <div class="recap-facts">${s.facts.map(f => `<div class="recap-fact">${esc(f)}</div>`).join('')}</div>
@@ -1816,29 +1969,29 @@ function drawRecap() {
   x.fillText(s.range.toUpperCase(), 30, 86);
   x.strokeStyle = '#C6F432'; x.globalAlpha = 1; x.lineWidth = 2; x.lineWidth = 1;
   x.beginPath(); x.moveTo(30, 108); x.lineTo(W-30, 108); x.stroke(); x.globalAlpha = 1;
-  const stats = [[String(s.days), '天'], [String(t.expenses.length), '笔支出'], [String((t.stops || []).length), '行程']];
+  const stats = [[String(s.days), '天'], [String(t.expenses.length), '笔支出'], [String((t.stops || []).length), '站点']];
   x.textAlign = 'center';
   stats.forEach(([n, lb], i) => {
     const cx = 30 + (i+.5)*((W-60)/3);
     x.fillStyle = '#fff'; x.font = '800 22px ' + serif; x.fillText(n, cx, 148);
-    x.fillStyle = '#D6D4FF'; x.font = '600 9px ' + sans; x.fillText(lb.toUpperCase(), cx, 165);
+    x.fillStyle = '#D6D4FF'; x.font = '600 9px ' + sans; x.fillText(tr(lb).toUpperCase(), cx, 165);
   });
-  x.fillStyle = '#D6D4FF'; x.font = '600 10px ' + sans; x.fillText('总花费', W/2, 200);
+  x.fillStyle = '#D6D4FF'; x.font = '600 10px ' + sans; x.fillText(tr('总花费'), W/2, 200);
   x.fillStyle = '#fff'; x.font = '800 20px ' + serif; x.fillText(`${t.currency} ${fmt(s.total)}`, W/2, 224);
   x.textAlign = 'left';
   s.facts.forEach((f, i) => {
     const y = 262 + i*40;
     x.fillStyle = '#C6F432'; x.fillRect(30, y-11, 1.5, 26);
-    x.fillStyle = '#FFFFFF'; x.font = '500 12px ' + sans; x.fillText(f, 40, y+3);
+    x.fillStyle = '#FFFFFF'; x.font = '500 12px ' + sans; x.fillText(tr(f), 40, y+3);
   });
   if (s.settled) {
     x.strokeStyle = 'rgba(255,255,255,.15)'; x.lineWidth = 1;
     x.beginPath(); x.moveTo(30, H-46); x.lineTo(W-30, H-46); x.stroke();
     x.fillStyle = '#C6F432'; x.font = '600 10px ' + sans; x.textAlign = 'right';
-    x.fillText('已 结 清', W-30, H-26); x.textAlign = 'left';
+    x.fillText(tr('已 结 清'), W-30, H-26); x.textAlign = 'left';
   }
   x.fillStyle = '#B9B6FF'; x.font = '500 9px ' + sans; x.textAlign = 'center';
-  x.fillText('旅行分账', W/2, H-16); x.textAlign = 'left';
+  x.fillText(tr('旅行分账'), W/2, H-16); x.textAlign = 'left';
 }
 function saveRecap() {
   const a = document.createElement('a');
@@ -1846,6 +1999,71 @@ function saveRecap() {
   a.href = document.getElementById('recap').toDataURL('image/png');
   a.click();
 }
+/* ============ 外观(白天/夜间)与语言设置 ============ */
+let THEME = 'auto';
+try { THEME = localStorage.getItem(TK) || 'auto'; } catch {}
+const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
+const isDark = () => THEME === 'dark' || (THEME === 'auto' && mqDark.matches);
+function applyTheme() {
+  const r = document.documentElement;
+  if (THEME === 'auto') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', THEME);
+  document.getElementById('tc').setAttribute('content', isDark() ? '#0E0E16' : '#EEF0F7');
+  document.querySelectorAll('.theme-btn').forEach(b => b.textContent = isDark() ? '🌙' : '☀️');
+}
+function setTheme(m) { THEME = m; try { localStorage.setItem(TK, m); } catch {} applyTheme(); fillSettings(); }
+function toggleTheme() { setTheme(isDark() ? 'light' : 'dark'); }
+mqDark.addEventListener('change', applyTheme);
+function setLang(l) {
+  LANG = l; try { localStorage.setItem(LK, l); } catch {} trCache.clear();
+  document.documentElement.lang = l === 'zh' ? 'zh' : 'en';
+  document.title = tr('旅行分账');
+  render(); fillSettings();
+}
+function toolbar(left) {
+  return `<div class="toolbar"><div>${left || ''}</div><div class="tools">
+    <button class="tool-btn theme-btn" onclick="toggleTheme()" aria-label="切换白天/夜间">${isDark() ? '🌙' : '☀️'}</button>
+    <button class="tool-btn" onclick="openSettings()" aria-label="设置">🌐</button></div></div>`;
+}
+function openSettings() {
+  closeSettings();
+  const d = document.createElement('div');
+  d.id = 'settings'; d.className = 'overlay';
+  d.onclick = e => { if (e.target === d) closeSettings(); };
+  document.body.appendChild(d); fillSettings();
+}
+function closeSettings() { const d = document.getElementById('settings'); if (d) d.remove(); }
+function fillSettings() {
+  const d = document.getElementById('settings'); if (!d) return;
+  const seg = (items, cur, fn) => `<div style="display:flex;flex-wrap:wrap;gap:8px">${items.map(([v, l]) =>
+    `<button type="button" class="chip ${v === cur ? 'on' : ''}" onclick="${fn}('${v}')">${l}</button>`).join('')}</div>`;
+  d.innerHTML = `<div class="surface" style="width:min(340px,92vw)"><div class="eb">设置</div>
+    <label>外观</label>${seg([['auto','🌓 跟随系统'], ['light','☀️ 白天'], ['dark','🌙 夜间']], THEME, 'setTheme')}
+    <label>语言</label>${seg([['zh','中文'], ['en','English']], LANG, 'setLang')}
+    <button class="cta" style="margin-top:22px" onclick="closeSettings()">完成</button></div>`;
+  trTree(d);
+}
+function trNode(n) {
+  if (n.nodeType === 3) { const v = tr(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v; }
+  else if (n.nodeType === 1) trTree(n);
+}
+function trTree(root) {
+  if (LANG === 'zh') return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n; (n = w.nextNode());) trNode(n);
+  [root, ...root.querySelectorAll('[placeholder],[aria-label],[title]')].forEach(el => ['placeholder', 'aria-label', 'title'].forEach(a => {
+    const v = el.getAttribute(a); if (v && CJK.test(v)) el.setAttribute(a, tr(v));
+  }));
+}
+new MutationObserver(ms => {
+  if (LANG === 'zh') return;
+  for (const m of ms) {
+    if (m.type === 'characterData') trNode(m.target); else m.addedNodes.forEach(trNode);
+  }
+}).observe(document.getElementById('app'), { childList:true, subtree:true, characterData:true });
+{ const A = window.alert.bind(window), C = window.confirm.bind(window), P = window.prompt.bind(window);
+  window.alert = m => A(tr(String(m))); window.confirm = m => C(tr(String(m))); window.prompt = (m, d) => P(tr(String(m)), d); }
+applyTheme(); document.documentElement.lang = LANG === 'zh' ? 'zh' : 'en'; document.title = tr('旅行分账');
+
 const joinCode0 = typeof location !== 'undefined' && new URLSearchParams(location.search).get('join');
 if (joinCode0) joinByCode(joinCode0); else render();
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && location.protocol === 'https:')
