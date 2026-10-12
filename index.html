@@ -330,6 +330,43 @@ function settleUp(bal) {
   }
   return out;
 }
+// 把 total 按权重整数分配,总和严格等于 total(最大余数法)
+function allocate(total, weights) {
+  const ids = Object.keys(weights), W = ids.reduce((x, i) => x + weights[i], 0);
+  const out = {}, frac = []; let used = 0;
+  for (const id of ids) { const x = total * weights[id] / W; out[id] = Math.floor(x); used += out[id]; frac.push([id, x - out[id]]); }
+  frac.sort((a, b) => b[1] - a[1]);
+  for (let i = 0; i < total - used; i++) out[frac[i % frac.length][0]]++;
+  return out;
+}
+// 逐笔结算:每笔账里,多出来的人(垫得比应摊多)被少出的人直接还;最后同一对人之间互相抵扣。
+// 每个人的净额和 computeBalances 一致,只是钱付给谁不同。
+function directTransfers(t) {
+  const set = {}; t.members.forEach(m => set[m.id] = 0);
+  const owe = {};
+  const add = (a, b, c) => { if (!c || a === b) return; owe[a] = owe[a] || {}; owe[a][b] = (owe[a][b] || 0) + c; };
+  for (const e of t.expenses) {
+    const sh = expenseShares(e, set);
+    if (!sh) continue;
+    const cred = {}; let C = 0;
+    const n = {};
+    for (const id of Object.keys(set)) n[id] = ((e.payers || {})[id] || 0) - (sh[id] || 0);
+    for (const [id, v] of Object.entries(n)) if (v > 0) { cred[id] = v; C += v; }
+    if (!C) continue;
+    for (const [id, v] of Object.entries(n)) if (v < 0) for (const [to, c] of Object.entries(allocate(-v, cred))) add(id, to, c);
+  }
+  if (t.fundHolder && t.fundHolder in set) for (const c of (t.fundIn || [])) if (c.by in set) add(t.fundHolder, c.by, c.mainCents);
+  for (const st of (t.settlements || [])) add(st.to, st.from, st.cents);
+  const ids = Object.keys(set), out = [];
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+    const a = ids[i], b = ids[j];
+    const net = ((owe[a] || {})[b] || 0) - ((owe[b] || {})[a] || 0);
+    if (net > 0) out.push({ from: a, to: b, cents: net }); else if (net < 0) out.push({ from: b, to: a, cents: -net });
+  }
+  return out.sort((x, y) => y.cents - x.cents);
+}
+function planFor(t) { return t.settleMode === 'direct' ? directTransfers(t) : settleUp(computeBalances(t)); }
+function setSettleMode(m) { trip().settleMode = m; save(); keepScroll(render); }
 function transferDetail(t, from, to) {
   const set = {}; t.members.forEach(m => set[m.id] = 0);
   const lines = []; let sum = 0;
@@ -614,6 +651,17 @@ function repriceExpense(e, rate) {
   const bf = computeBalances({ members:[{id:'A'},{id:'B'}], settlements:[], fundHolder:'A', fundIn:[{by:'B', mainCents:10000}],
     expenses:[{ payers:{A:3000}, participantIds:['A','B'], mainCents:3000, rate:1, fromFund:true, split:{type:'equal'} }] });
   console.assert(bf.B === 8500 && bf.A === -8500 && bf.A + bf.B === 0, '共同基金余额算错', bf);
+  // 逐笔还给垫付的人:Angel 欠 Dexter 机票 1207 要原样出现,且每人净额和 computeBalances 一致
+  const td = { members:[{id:'A'},{id:'D'},{id:'E'}], settlements:[], expenses:[
+    { payers:{D:120700}, participantIds:['A'], mainCents:120700, rate:1, split:{type:'equal'} },
+    { payers:{E:150000}, participantIds:['D'], mainCents:150000, rate:1, split:{type:'equal'} },
+    { payers:{E:44467}, participantIds:['A'], mainCents:44467, rate:1, split:{type:'equal'} },
+    { payers:{A:5000, D:5001}, participantIds:['A','D','E'], mainCents:10001, rate:1, split:{type:'equal'} } ] };
+  const netOf = tt => { const r = directTransfers(tt), nb = { A:0, D:0, E:0 }; r.forEach(x => { nb[x.from] -= x.cents; nb[x.to] += x.cents; }); return { r, nb, bd: computeBalances(tt) }; };
+  const q1 = netOf(td), q2 = netOf({ ...td, settlements:[{ from:'A', to:'D', cents:100000 }] });
+  const ad = x => (x.r.find(y => y.from === 'A' && y.to === 'D') || {}).cents;
+  console.assert(q1.r.every(x => x.cents > 0) && ['A','D','E'].every(k => q1.nb[k] === q1.bd[k] && q2.nb[k] === q2.bd[k]) && ad(q1) === 120700 && ad(q2) === 20700,
+    '逐笔结算算错', q1, q2);
   // 清单作为独立记录同步
   const rt = tripToRecords({ id:'T', name:'n', currency:'MYR', members:[], expenses:[], stops:[], settlements:[], todos:[{id:'d1', text:'护照', done:false}] });
   console.assert(rt.length === 2 && rt[1].kind === 'todo' && applyRemote({ todos:[] }, { id:'d1', kind:'todo', data:{id:'d1', text:'x'} }), '清单同步算错', rt);
@@ -1124,7 +1172,7 @@ function delStop(id) {
   save(); render();
 }
 function copySummary() {
-  const t = trip(), bal = computeBalances(t), plan = settleUp(bal);
+  const t = trip(), bal = computeBalances(t), plan = planFor(t);
   const lines = [`【${t.name}】对账（${t.currency}）`, ...t.members.map(m => `${m.name}：${bal[m.id] >= 0 ? '+' : ''}${fmt(bal[m.id])}`)];
   lines.push('', plan.length ? '转账建议：' : '已结清 ✓');
   plan.forEach(p => lines.push(`${mname(t, p.from)} → ${mname(t, p.to)}  ${fmt(p.cents)}`));
@@ -1203,7 +1251,7 @@ function dateRange(t) {
 }
 function statusChip(t) {
   if (!t.members.length || !t.expenses.length) return '';
-  const plan = settleUp(computeBalances(t));
+  const plan = planFor(t);
   return `<div class="status" onclick="setTab('settle')">
     <span>${plan.length ? `尚有 <b class="num">${plan.length}</b> 笔待结` : '已结清 · 圆满收官'}</span>
     <span class="arr">对账 →</span></div>`;
@@ -1658,7 +1706,9 @@ function statRows(pairs, unit) {
 function renderSettle(t) {
   if (!t.members.length) return '<p class="muted">先加成员。</p>';
   const bal = computeBalances(t);
-  const plan = settleUp(bal);
+  const direct = t.settleMode === 'direct';
+  const plan = planFor(t);
+  const minN = settleUp(bal).length, dirN = directTransfers(t).length;
   const settled = !plan.length && t.expenses.length;
   const ids = {}; t.members.forEach(m => ids[m.id] = 0);
   const spend = {...ids}, paid = {...ids};
@@ -1674,8 +1724,13 @@ function renderSettle(t) {
   <div class="s2-sub">${settled ? '<span class="stamp">已结清</span>' : `尚有 ${plan.length} 笔转账，即可结清`}</div>
   ${t.members.map(m => lr(esc(m.name), `${bal[m.id] >= 0 ? '+' : ''}${fmt(bal[m.id])}`,
     `num ${bal[m.id] > 0 ? 'pos' : bal[m.id] < 0 ? 'neg' : ''}`)).map(x => `<div class="balance-row">${x}</div>`).join('')}
-  ${plan.length ? `<h2>转账建议 · 最少 ${plan.length} 笔</h2>
-  <p class="muted" style="font-size:12.5px;margin-bottom:6px">先算出每人净余额，再用最少的转账笔数互相抵扣——所以每笔转账不一定对应某一张小票，明细仅列直接相关的账。</p>` : ''}
+  ${t.expenses.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:20px">
+    <button class="chip ${direct ? '' : 'on'}" onclick="setSettleMode('min')">最少转账 · ${minN} 笔</button>
+    <button class="chip ${direct ? 'on' : ''}" onclick="setSettleMode('direct')">逐笔还给垫付的人 · ${dirN} 笔</button></div>` : ''}
+  ${plan.length ? `<h2>${direct ? '转账清单' : '转账建议 · 最少'} ${plan.length} 笔</h2>
+  <p class="muted" style="font-size:12.5px;margin-bottom:6px">${direct
+    ? '每一笔账，谁垫的钱就还给谁；两个人之间互相欠的会先抵扣。笔数可能比「最少转账」多，但每笔都能对上具体的账。'
+    : '先算出每人净余额，再用最少的转账笔数互相抵扣——所以每笔转账不一定对应某一张小票，明细仅列直接相关的账。'}</p>` : ''}
   ${plan.map(p => {
     const d = transferDetail(t, p.from, p.to);
     return `<div class="transfer">
@@ -1683,8 +1738,8 @@ function renderSettle(t) {
       ${d.lines.length ? `<details class="t-detail">
         <summary>查看明细 · ${d.lines.length} 笔</summary>
         <div class="detail-line">${d.lines.map(x => lr(esc(x.desc), fmt(x.cents))).join('')}
-        ${d.sum !== p.cents ? `<div style="margin-top:6px">经多人互相抵扣后为 ${t.currency} ${fmt(p.cents)}</div>` : ''}</div>
-      </details>` : `<div class="detail-line">由多人债务互相抵扣而来</div>`}
+        ${d.sum !== p.cents ? `<div style="margin-top:6px">${direct ? '两人互相抵扣后' : '经多人互相抵扣后'}为 ${t.currency} ${fmt(p.cents)}</div>` : ''}</div>
+      </details>` : `<div class="detail-line">${direct ? '来自共同基金的存入，或两人之间互相抵扣' : '由多人债务互相抵扣而来'}</div>`}
       <div class="t-actions"><button class="outline" onclick="markPaid('${p.from}','${p.to}',${p.cents})">标记已还</button></div>
     </div>`;
   }).join('')}
