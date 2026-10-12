@@ -672,8 +672,8 @@ function repriceExpense(e, rate) {
 })();
 
 /* ============ V2 多人同步(Supabase) ============ */
-const SUPA_URL = 'https://zxqueifzbonuyzwhbbzg.supabase.co';  // 留空则纯本地运行
-const SUPA_KEY = 'sb_publishable_ehH07iIcs-Ad9kcGZU_jQw_jOWMH9Sd';
+const SUPA_URL = 'https://zgmzicfscsawsqshvekc.supabase.co';  // 留空则纯本地运行
+const SUPA_KEY = 'sb_publishable_Ct9Ey9cnRAvvdL0I4_uqaA_46VLUmQ2';
 const supa = (SUPA_URL && typeof supabase !== 'undefined') ? supabase.createClient(SUPA_URL, SUPA_KEY) : null;
 const SS = 'travel-split-sync';
 let sync = JSON.parse(localStorage.getItem(SS) || '{"outbox":[],"snap":{},"lastPulled":{},"me":{}}');
