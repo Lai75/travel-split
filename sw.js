@@ -1,7 +1,7 @@
 'use strict';
 // 缓存策略:先回缓存、后台更新(stale-while-revalidate)。新版本第二次打开生效。
 // 只缓存本站文件和 jsdelivr 的 supabase-js;Supabase 数据请求一律直连网络。
-const CACHE = 'travel-split-v1';
+const CACHE = 'travel-split-v2';
 const cacheable = h => h === location.hostname || h === 'cdn.jsdelivr.net';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(clients.claim()));
