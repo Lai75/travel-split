@@ -127,6 +127,17 @@
   .fab:active { transform:translateX(-50%) scale(.97); }
 
   /* 旅行计划 */
+  .seg { display:flex; background:var(--field); border-radius:14px; padding:4px; margin:14px 0 16px; }
+  .seg button { flex:1; padding:9px 0; border-radius:11px; font-size:14px; font-weight:650; color:var(--sub); }
+  .seg button.on { background:var(--surface); color:var(--ink); box-shadow:var(--shadow); }
+  .wish { --kc:var(--faint); display:flex; gap:6px; background:var(--surface); border-radius:20px; padding:10px 14px 12px 8px; margin-top:10px; box-shadow:var(--shadow); }
+  .wish[data-c="想去"] { --kc:#2F8FE0; } .wish[data-c="想吃"] { --kc:#F26B4A; } .wish[data-c="想买"] { --kc:#8B6CF0; }
+  .wish .st-dot { flex:0 0 36px; }
+  .w-b { flex:1; min-width:0; padding-top:5px; }
+  .wish.done .w-b { opacity:.55; } .wish.done .pn { text-decoration:line-through; text-decoration-color:var(--faint); }
+  .wish.done .st-dot span { background:var(--kc); }
+  .wish.done .st-dot span::after { content:'✓'; color:#fff; font-size:11px; font-weight:800; line-height:1; }
+  .w-planned { font-size:12px; font-weight:650; color:var(--brand-ink); background:var(--brand-soft); border-radius:99px; padding:1px 9px; }
   .daynav { position:sticky; top:0; z-index:6; display:flex; gap:8px; overflow-x:auto; margin:10px -18px 0; padding:10px 18px;
     background:var(--bg); scrollbar-width:none; }
   .daynav::-webkit-scrollbar { display:none; }
@@ -304,7 +315,7 @@
     #app { padding:0; max-width:none; }
     .plan-item, .plan-day { break-inside:avoid; }
     .tl { box-shadow:none; border:1px solid #ddd; }
-    .daynav { display:none; }
+    .daynav, .seg { display:none; }
     .st-note { display:block; -webkit-line-clamp:unset; }
     a { color:inherit; }
   }
@@ -343,7 +354,7 @@ const fmt  = c => (c/100).toFixed(2);
 const mname = (t,id) => (t.members.find(m => m.id === id) || {name:'?'}).name;
 const CATS = ['餐饮','住宿','交通','门票','购物','其他'];
 const CURS = ['MYR','JPY','USD','CNY','SGD'];
-const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements', exchange:'exchanges', todo:'todos', fund:'fundIn' };
+const KIND_ARR = { member:'members', expense:'expenses', stop:'stops', settlement:'settlements', exchange:'exchanges', todo:'todos', fund:'fundIn', wish:'wishes' };
 
 function mainPayer(e, memberSet) {
   let best = null;
@@ -761,7 +772,7 @@ const saveSync = () => localStorage.setItem(SS, JSON.stringify(sync));
 function tripToRecords(t) {
   const recs = [{ id:'trip', kind:'trip', data:{ name:t.name, currency:t.currency, fundHolder:t.fundHolder || '' } }];
   const add = (kind, list) => (list || []).forEach(x => recs.push({ id:x.id, kind, data:x }));
-  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges); add('todo', t.todos); add('fund', t.fundIn);
+  add('member', t.members); add('expense', t.expenses); add('stop', t.stops); add('settlement', t.settlements); add('exchange', t.exchanges); add('todo', t.todos); add('fund', t.fundIn); add('wish', t.wishes);
   return recs;
 }
 function diffRecords(snap, t) {
@@ -1029,7 +1040,7 @@ function openEditExpense(id) {
   render(); scrollToId('expense-form');
 }
 function toggleStopForm() {
-  view.showStopForm = !view.showStopForm; view.editStopId = ''; render();
+  view.showStopForm = !view.showStopForm; view.editStopId = ''; view.prefill = null; render();
   if (view.showStopForm) scrollToId('stop-form');
 }
 function openEditStop(id) { view.showStopForm = true; view.editStopId = id; render(); scrollToId('stop-form'); }
@@ -1118,7 +1129,8 @@ function addStop(ev) {
     if (used.length) rec.ord = Math.max(...used) + 1;
   }
   if (i >= 0) t.stops[i] = rec; else t.stops.push(rec);
-  view.showStopForm = false; view.editStopId = ''; save(); render();
+  if (i < 0 && view.prefill) { const w = (t.wishes || []).find(x => x.id === view.prefill.id); if (w) w.planned = true; }
+  view.showStopForm = false; view.editStopId = ''; view.prefill = null; save(); render();
 }
 function keepScroll(fn) { const y = window.scrollY; fn(); window.scrollTo(0, y); }
 function toggleDone(id) {
@@ -1288,7 +1300,7 @@ const NAV_ICON = {
 function bottomBar() {
   const items = view.screen === 'trip'
     ? [['plan','计划'],['todo','清单'],['ledger','流水'],['fx','钱包'],['settle','对账']].map(([k, l]) =>
-        `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')"><span class="ic">${NAV_ICON[k]}</span>${l}</button>`)
+        `<button class="${view.tab === k ? 'on' : ''}" ${k === 'plan' ? 'data-dbl="1"' : ''} onclick="setTab('${k}')"><span class="ic">${NAV_ICON[k]}</span>${l}</button>`)
     : [['list','行程'],['backup','备份']].map(([k, l]) =>
         `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')"><span class="ic">${NAV_ICON[k]}</span>${l}</button>`);
   return `<nav class="bottombar"><div class="bb-in">${items.join('')}</div></nav>`;
@@ -1375,7 +1387,7 @@ function renderTrip() {
   ` : (t.members.length ? '' : `<p class="muted" style="margin-top:14px">还没有成员。<button class="ghost" onclick="setTab('plan')">先去添加</button></p>`)}
   ${view.showForm ? expenseForm(t) : ''}
   ${body}
-  ${t.members.length && !['fx', 'todo'].includes(view.tab) ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
+  ${t.members.length && !['fx', 'todo'].includes(view.tab) && !(view.tab === 'plan' && view.planMode === 'wish') ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
   ${view.showRecap ? recapOverlay() : ''}
   ${view.showInvite ? inviteOverlay(t) : ''}
   ${view.showClaim ? claimOverlay(t) : ''}
@@ -1409,6 +1421,7 @@ function claimOverlay(t) {
 }
 
 function renderPlan(t) {
+  if (view.planMode === 'wish') return renderWish(t);
   const stops = sortedStops(t);
   const today = new Date().toISOString().slice(0, 10);
   const first = stops.length ? stops[0].date : '';
@@ -1416,12 +1429,14 @@ function renderPlan(t) {
   const days = [];
   stops.forEach(s => { const g = days[days.length - 1]; if (g && g.date === s.date) g.items.push(s); else days.push({ date: s.date, items: [s] }); });
   const es = view.editStopId ? stops.find(x => x.id === view.editStopId) : null;
-  const kind0 = (es && es.kind) || KINDS[0];
+  const pf = !es && view.prefill ? view.prefill : null;
+  const kind0 = (es && es.kind) || (pf && pf.kind) || KINDS[0];
   const status = tripStatus(stops.map(s => s.date).filter(Boolean), today);
   const todos = t.todos || [], tdone = todos.filter(x => x.done).length;
   return `
+  ${planSwitch()}
   <div class="tl-head">
-    <div><h2 style="margin:0">旅行计划</h2>${status ? `<div class="trip-date">${status}</div>` : ''}</div>
+    <div><h2 style="margin:0" data-dbl="1">旅行计划</h2>${status ? `<div class="trip-date">${status}</div>` : ''}</div>
     <div>${stops.length > 1 ? `<button class="ghost" onclick="toggleSortMode()">${view.sortMode ? '完成' : '排序'}</button>` : ''}${stops.length && !view.sortMode ? '<button class="ghost" onclick="window.print()">打印</button>' : ''}${view.sortMode ? '' : `<button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加行程'}</button>`}</div>
   </div>
   ${view.sortMode ? '<p class="muted" style="margin-top:8px">拖动整行，或点 ▲▼，调整当天的先后顺序。点「完成」退出。</p>' : ''}
@@ -1432,7 +1447,7 @@ function renderPlan(t) {
       <div><label>日期</label><input name="sdate" type="date" value="${es ? es.date : (days.length ? days[days.length - 1].date : today)}" required></div>
       <div><label>时间(可选)</label><input name="stime" type="time" value="${es ? es.time || '' : ''}"></div>
     </div>
-    <label>去哪里</label><input name="sname" placeholder="如 清水寺" value="${es ? esc(es.name) : ''}" required autofocus>
+    <label>去哪里</label><input name="sname" placeholder="如 清水寺" value="${es ? esc(es.name) : pf ? esc(pf.name) : ''}" required autofocus>
     <label>地图位置(可选，不填就按名字搜)</label>
     <div class="row">
       <input name="sloc" placeholder="粘贴地图链接，或填地址 / 经纬度" value="${es ? esc(es.loc || '') : ''}">
@@ -1441,7 +1456,7 @@ function renderPlan(t) {
     <p class="muted" style="font-size:12px;margin-top:6px">在 Google 地图里点「分享」→「复制链接」，粘贴到这里，打开地图时就会精确定位到你选的那个点。</p>
     <label>类型</label>
     <div class="checks">${KINDS.map(k => `<label><input type="radio" name="skind" value="${k}" ${k === kind0 ? 'checked' : ''}>${k}</label>`).join('')}</div>
-    <label>备注(可选)</label><input name="snote" placeholder="订位号、交通、要带什么…" value="${es ? esc(es.note || '') : ''}">
+    <label>备注(可选)</label><input name="snote" placeholder="订位号、交通、要带什么…" value="${es ? esc(es.note || '') : pf ? esc(pf.note || '') : ''}">
     <button class="cta" style="margin-top:16px">${es ? '保存修改' : '加入计划'}</button>
     ${es ? '' : '<p class="muted" style="font-size:12px;margin-top:10px">加入后，在这一条下面点「＋ 照片」就能放照片。</p>'}
   </form>` : ''}
@@ -1513,6 +1528,78 @@ const dayItems = (t, date) => sortedStops(t).filter(s => s.date === date);
 const setDayOrder = list => list.forEach((s, i) => { s.ord = i + 1; });
 function toggleStop(id) { view.openStop = view.openStop === id ? '' : id; keepScroll(render); }
 function jumpDay(d) { const el = document.getElementById('day-' + d); if (el) el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); }
+
+// ================= 想去清单（想去 / 想吃 / 想买）=================
+const WISH_CATS = ['想去','想吃','想买'];
+const WISH_DONE = { '想去':'已去过', '想吃':'已吃过', '想买':'已买到' };
+const WISH_KIND = { '想去':'景点', '想吃':'美食', '想买':'其他' };
+function planSwitch() {
+  const w = view.planMode === 'wish';
+  return `<div class="seg" role="tablist"><button role="tab" aria-selected="${!w}" class="${w ? '' : 'on'}" onclick="setPlanMode('plan')">行程</button><button role="tab" aria-selected="${w}" class="${w ? 'on' : ''}" onclick="setPlanMode('wish')">想去清单</button></div>`;
+}
+function setPlanMode(m) {
+  view.planMode = m; view.showStopForm = false; view.prefill = null; view.showForm = false;
+  render(); window.scrollTo(0, 0);
+}
+// 连按两下「计划」标签或「旅行计划」标题 → 在行程和想去清单之间切换
+let lastTap = { k:'', t:0 };
+document.addEventListener('click', ev => {
+  const el = ev.target.closest && ev.target.closest('[data-dbl]');
+  if (!el || !document.getElementById('app').contains(el) && !el.closest('.bottombar')) return;
+  const k = el.tagName + (el.textContent || '').slice(0, 6), now = Date.now();
+  if (lastTap.k === k && now - lastTap.t < 380) {
+    lastTap = { k:'', t:0 };
+    if (view.screen === 'trip') { view.tab = 'plan'; setPlanMode(view.planMode === 'wish' ? 'plan' : 'wish'); }
+  } else lastTap = { k, t: now };
+});
+function renderWish(t) {
+  const all = t.wishes || [];
+  const f = view.wishFilter || '全部';
+  const cnt = c => all.filter(x => x.cat === c && !x.done).length;
+  const list = all.filter(x => f === '全部' || x.cat === f);
+  const ordered = [...list.filter(x => !x.done), ...list.filter(x => x.done)];
+  const c0 = view.wishCat || (f !== '全部' ? f : '想去');
+  return `
+  ${planSwitch()}
+  <div class="tl-head">
+    <div><h2 style="margin:0" data-dbl="1">想去清单</h2><div class="trip-date">${all.length ? `还有 ${all.filter(x => !x.done).length} 个没实现` : '想去的、想吃的、想买的，先记在这里'}</div></div>
+  </div>
+  <form class="surface" onsubmit="addWish(event)" style="margin-top:14px">
+    <input name="wname" placeholder="想去 / 想吃 / 想买什么？如 一兰拉面" required>
+    <div class="checks" style="margin-top:12px">${WISH_CATS.map(c => `<label><input type="radio" name="wcat" value="${c}" ${c === c0 ? 'checked' : ''} onchange="view.wishCat=this.value">${c}</label>`).join('')}</div>
+    <input name="wnote" placeholder="备注（可选）：店名、价格、在哪里买…" style="margin-top:10px">
+    <button class="cta" style="margin-top:14px">加入清单</button>
+  </form>
+  ${all.length ? `<div class="daynav" style="position:static;margin:4px 0 0;padding:6px 0 10px">${['全部', ...WISH_CATS].map(c => `<button class="chip ${f === c ? 'on' : ''}" onclick="view.wishFilter='${c}';render()">${c}${c === '全部' ? '' : ' ' + cnt(c)}</button>`).join('')}</div>` : ''}
+  ${ordered.map(x => `
+    <div class="wish ${x.done ? 'done' : ''}" data-c="${x.cat}">
+      <button class="st-dot" onclick="toggleWish('${x.id}')" aria-label="${x.done ? '取消' : WISH_DONE[x.cat]}"><span></span></button>
+      <div class="w-b">
+        <div class="st-top"><span class="pn">${esc(x.name)}</span><span class="ptag">${x.cat}</span>${x.planned ? '<span class="w-planned">已排入行程</span>' : ''}</div>
+        ${x.note ? `<div class="pm">${esc(x.note)}</div>` : ''}
+        <div class="st-acts">
+          ${x.cat !== '想买' ? `<a href="${esc(mapHref({ name:x.name }))}" target="_blank" rel="noopener">地图</a>` : ''}
+          ${x.cat !== '想买' && !x.done ? `<button onclick="wishToPlan('${x.id}')">排进行程</button>` : ''}
+          <button class="del" onclick="delWish('${x.id}')">删除</button>
+        </div>
+      </div>
+    </div>`).join('') || (all.length ? `<p class="muted" style="margin-top:14px">这一类还没有内容。</p>` : '<p class="muted" style="margin-top:14px">看到想去的地方、想吃的店、想买的东西，随手记下。决定去了，就点「排进行程」。连按两下「计划」标签可以快速回到行程。</p>')}`;
+}
+function addWish(ev) {
+  ev.preventDefault();
+  const f = ev.target, name = f.wname.value.trim();
+  if (!name) return;
+  const t = trip(); (t.wishes = t.wishes || []).push({ id: uid(), cat: f.wcat.value, name, note: f.wnote.value.trim(), done: false });
+  view.wishCat = f.wcat.value; save(); render();
+  const el = document.querySelector('input[name=wname]'); if (el) el.focus();
+}
+function toggleWish(id) { const x = (trip().wishes || []).find(x => x.id === id); if (x) { x.done = !x.done; save(); keepScroll(render); } }
+function delWish(id) { const t = trip(); t.wishes = (t.wishes || []).filter(x => x.id !== id); save(); keepScroll(render); }
+function wishToPlan(id) {
+  const x = (trip().wishes || []).find(x => x.id === id); if (!x) return;
+  view.prefill = { id, name: x.name, note: x.note || '', kind: WISH_KIND[x.cat] };
+  view.planMode = 'plan'; view.showStopForm = true; view.editStopId = ''; render(); scrollToId('stop-form');
+}
 function toggleSortMode() { view.sortMode = !view.sortMode; view.showStopForm = false; render(); }
 function moveStop(id, d) {
   const t = trip(), s = (t.stops || []).find(x => x.id === id);
