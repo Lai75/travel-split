@@ -3,38 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#EEF0F7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0E0E16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F6F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1317" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>旅行分账</title>
 <style>
   /* ============================================================
-     设计方向:「汽水感」
-     冷调浅底 + 电光靛蓝做品牌色;荧光青柠只留给"操作和进度"
-     (记一笔、Day 标签、已去过的勾),让它成为页面里唯一抢眼的颜色。
-     圆体粗字、胶囊选项、浮动底栏;类别和行程类型用 emoji 当图标。
+     设计方向:清爽、有颜色、不拥挤
+     浅色带一点冷调的底 + 白色圆角卡片;一个主题色(可在「备份」页切换)用在按钮、选中和链接上。
+     文字用深海军蓝而不是纯黑,看起来更柔和。
      ============================================================ */
   :root {
-    --bg:#EEF0F7; --surface:#FFFFFF; --field:#F2F3FA;
-    --ink:#14141F; --sub:#6C6E86; --faint:#B7B9CC; --line:#E1E3EF;
-    --brand:#4F46FF; --brand-soft:#E8E7FF; --accent:#4F46FF; --accent-ink:#4F46FF;
+    --bg:#F2F6F7; --surface:#FFFFFF; --field:#EDF2F4;
+    --ink:#12263A; --sub:#5F7285; --faint:#A9B7C2; --line:#E2EAEE;
+    --brand:#0B7F76; --brand-ink:#0A6F67; --brand-soft:#DDF3F0; --on-brand:#FFFFFF;
+    --accent:var(--brand); --accent-ink:var(--brand-ink); --on-ink:var(--on-brand);
+    --pop:#FF7A59; --pop-soft:#FFEBE3;
     --lime:#C6F432; --lime-soft:#F0FBC8; --pink-soft:#FFE2EB; --sun-soft:#FFF0B3; --sky-soft:#DCF0FF;
-    --pos-ink:#3B6B00; --neg-ink:#C2185B; --clay:#C2185B; --sage:#3B6B00;
-    --shadow:0 1px 2px rgba(20,20,60,.05), 0 10px 26px -14px rgba(20,20,60,.22);
-    --font: ui-rounded,'SF Pro Rounded','PingFang SC','HarmonyOS Sans SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+    --pos-ink:#13795B; --neg-ink:#C23550; --clay:#C23550; --sage:#13795B;
+    --shadow:0 1px 2px rgba(18,38,58,.04), 0 10px 26px -18px rgba(18,38,58,.22);
+    --font: -apple-system,BlinkMacSystemFont,'SF Pro Text','Inter','PingFang SC','HarmonyOS Sans SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
     --serif: var(--font);
     --mono: ui-monospace,'SF Mono',Consolas,Menlo,monospace;
   }
+  :root[data-theme="indigo"] { --brand:#4F46E5; --brand-ink:#4338CA; --brand-soft:#E9E8FF; --bg:#F3F4FB; --ink:#191B3A; --sub:#62647F; --line:#E4E6F3; --field:#EEEFF8; }
+  :root[data-theme="peach"]  { --brand:#CF4128; --brand-ink:#B93A24; --brand-soft:#FFE6DF; --bg:#FBF5F2; --ink:#2C1B17; --sub:#7A625C; --line:#F0E3DE; --field:#F6EDE9; --pop:#0B7F76; --pop-soft:#DDF3F0; }
+  :root[data-theme="ink"]    { --brand:#111114; --brand-ink:#111114; --brand-soft:#E9E9EE; --bg:#F5F5F7; --ink:#111114; --sub:#6F6F7A; --line:#E7E7EC; --field:#EFEFF2; }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg:#0E0E16; --surface:#1A1A27; --field:#242435;
-      --ink:#F3F3FA; --sub:#9A9CB6; --faint:#4A4B63; --line:#2C2C40;
-      --brand:#7068FF; --brand-soft:#2B2A55; --accent:#8F89FF; --accent-ink:#A9A4FF;
-      --lime-soft:#2C3510; --pink-soft:#3D1F2B; --sun-soft:#3A3213; --sky-soft:#17303F;
-      --pos-ink:#C6F432; --neg-ink:#FF8FB1; --clay:#FF8FB1; --sage:#C6F432;
-      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -14px rgba(0,0,0,.6);
+      --bg:#0E1317; --surface:#172027; --field:#1E2931;
+      --ink:#E9F0F4; --sub:#93A4B2; --faint:#52626F; --line:#25323B;
+      --brand:#2DD4BF; --brand-ink:#5EEAD4; --brand-soft:#12332F; --on-brand:#062B28;
+      --pop-soft:#3A2119; --pos-ink:#5FD08F; --neg-ink:#FF8FA3; --clay:#FF8FA3; --sage:#5FD08F;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 26px -18px rgba(0,0,0,.6);
     }
+    :root[data-theme="indigo"] { --brand:#8B85FF; --brand-ink:#B3AEFF; --brand-soft:#24224D; --on-brand:#0C0A2E; --bg:#0F0F18; --surface:#181826; --field:#202033; --line:#2A2A40; }
+    :root[data-theme="peach"]  { --brand:#FF8A6F; --brand-ink:#FFB19F; --brand-soft:#3A2119; --on-brand:#2E0F08; --bg:#140F0D; --surface:#1F1715; --field:#2A201D; --line:#38292A; }
+    :root[data-theme="ink"]    { --brand:#F4F4F6; --brand-ink:#F4F4F6; --brand-soft:#26262E; --on-brand:#0C0C0F; --bg:#0C0C0F; --surface:#17171C; --field:#1F1F26; --line:#26262E; }
   }
   * { box-sizing:border-box; margin:0; }
   body { font-family:var(--font); background:var(--bg); color:var(--ink); min-height:100vh;
@@ -42,155 +48,173 @@
   #app { max-width:520px; margin:0 auto; padding:30px 18px 150px; }
   .num { font-variant-numeric:tabular-nums; }
 
-  h1 { font-size:30px; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
-  h2 { font-size:19px; font-weight:800; letter-spacing:-.01em; margin:30px 0 12px; }
-  .eb { font-size:15px; font-weight:800; color:var(--ink); }
+  h1 { font-size:30px; font-weight:700; letter-spacing:-.025em; line-height:1.15; }
+  h2 { font-size:17px; font-weight:700; letter-spacing:-.01em; margin:32px 0 12px; }
+  .eb { font-size:15px; font-weight:700; }
   .muted { color:var(--sub); font-size:13.5px; line-height:1.75; }
 
-  button { font:inherit; border:none; border-radius:14px; cursor:pointer; padding:13px 20px; font-weight:700;
-    background:none; color:var(--ink); transition:transform .12s ease; }
-  button:active { transform:scale(.97); }
-  .cta { background:var(--brand); color:#fff; width:100%; padding:15px 20px; border-radius:16px; font-size:16px; font-weight:800; }
-  .outline { background:var(--surface); border:1.5px solid var(--line); color:var(--ink); padding:11px 18px; border-radius:14px; }
-  .ghost { color:var(--brand); font-weight:700; font-size:14px; padding:6px 0; margin-left:12px; }
+  button { font:inherit; border:none; border-radius:14px; cursor:pointer; padding:12px 18px; font-weight:600;
+    background:none; color:var(--ink); transition:opacity .15s ease, transform .12s ease; }
+  button:active { transform:scale(.98); opacity:.9; }
+  .cta { background:var(--brand); color:var(--on-brand); width:100%; padding:15px 20px; border-radius:16px; font-size:15.5px; font-weight:650; }
+  .outline { background:var(--surface); border:1.5px solid var(--line); color:var(--ink); padding:10px 18px; border-radius:14px; }
+  .ghost { color:var(--brand-ink); font-weight:650; font-size:14px; padding:6px 0; margin-left:14px; }
   .ghost:first-child { margin-left:0; }
-  .icon-btn { color:var(--sub); padding:4px 8px; font-size:13px; font-weight:600; }
-  button:focus-visible, summary:focus-visible, a:focus-visible { outline:3px solid var(--brand); outline-offset:2px; }
+  .icon-btn { color:var(--sub); padding:4px 8px; font-size:13px; font-weight:500; }
+  button:focus-visible, summary:focus-visible, a:focus-visible { outline:2.5px solid var(--brand); outline-offset:2px; }
 
-  .surface { background:var(--surface); border-radius:24px; padding:20px; margin-bottom:16px; box-shadow:var(--shadow); }
+  .surface { background:var(--surface); border-radius:22px; padding:20px; margin-bottom:16px; box-shadow:var(--shadow); }
   :where(input:not([type=checkbox]):not([type=radio]):not([type=file]), select) {
     font:inherit; padding:12px 14px; border:none; width:100%; min-width:0; background:var(--field); color:var(--ink); border-radius:14px; }
   :where(input, select):focus { outline:none; box-shadow:0 0 0 2px var(--brand); }
-  label { font-size:12.5px; font-weight:700; color:var(--sub); display:block; margin:16px 0 6px; }
+  label { font-size:12.5px; font-weight:600; color:var(--sub); display:block; margin:16px 0 6px; }
   .row { display:flex; gap:12px; align-items:flex-end; }
   .row > * { flex:1; }
 
   .checks { display:flex; flex-wrap:wrap; gap:8px; }
   .checks label { display:flex; align-items:center; gap:6px; margin:0; font-size:13.5px; color:var(--ink); background:var(--field);
-    border-radius:99px; padding:8px 14px; font-weight:600; cursor:pointer; }
+    border-radius:99px; padding:8px 14px; font-weight:550; cursor:pointer; }
   .checks input { width:auto; accent-color:var(--brand); }
   .checks input[type=radio] { position:absolute; opacity:0; width:0; }
-  .checks label:has(input[type=checkbox]:checked) { background:var(--brand-soft); box-shadow:inset 0 0 0 1.5px var(--brand); }
-  .checks label:has(input[type=radio]:checked) { background:var(--brand); color:#fff; }
-  .checks label:has(input[type=radio]:focus-visible) { outline:3px solid var(--brand); outline-offset:2px; }
+  .checks label:has(input[type=checkbox]:checked) { background:var(--brand-soft); color:var(--brand-ink); box-shadow:inset 0 0 0 1.5px var(--brand); }
+  .checks label:has(input[type=radio]:checked) { background:var(--brand); color:var(--on-brand); }
+  .checks label:has(input[type=radio]:focus-visible) { outline:2.5px solid var(--brand); outline-offset:2px; }
   .sv { width:60px; padding:4px 8px; font-size:13px; border-radius:8px; background:var(--surface); }
-  .chip { background:var(--field); border-radius:99px; padding:7px 15px; font-size:13.5px; font-weight:700; color:var(--ink); }
-  .chip.on { background:var(--brand); color:#fff; }
-  .amt-in { font-size:38px; font-weight:800; letter-spacing:-.02em; padding:10px 14px; }
-  .cur-in { font-size:18px; font-weight:800; text-align:center; }
-  .hint { font-size:12px; color:var(--brand); font-weight:600; margin-top:6px; }
+  .chip { background:var(--field); border-radius:99px; padding:7px 15px; font-size:13.5px; font-weight:600; color:var(--ink); }
+  .chip.on { background:var(--brand); color:var(--on-brand); }
+  .amt-in { font-size:38px; font-weight:700; letter-spacing:-.025em; padding:10px 14px; }
+  .cur-in { font-size:18px; font-weight:700; text-align:center; }
+  .hint { font-size:12px; color:var(--brand-ink); font-weight:600; margin-top:6px; }
 
   .topbar { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-  .trip-date { font-size:13px; color:var(--sub); margin-top:6px; font-weight:500; }
+  .trip-date { font-size:13px; color:var(--sub); margin-top:6px; }
   .avatars { display:flex; flex-shrink:0; padding-top:4px; }
   .av { width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
-    color:#14141F; font-size:12.5px; font-weight:800; border:2.5px solid var(--bg); margin-left:-9px; }
+    color:#12263A; font-size:12.5px; font-weight:700; border:2.5px solid var(--bg); margin-left:-9px; }
   .avatars .av:first-child { margin-left:0; }
-  .av.a0 { background:#C9C6FF; } .av.a1 { background:var(--lime); } .av.a2 { background:#FFB8CF; }
-  .av.a3 { background:#FFE27A; } .av.a4 { background:#A9DBFF; }
-  .tag { display:inline-flex; align-items:center; background:var(--brand-soft); border-radius:99px; padding:5px 6px 5px 14px;
-    margin:0 6px 6px 0; font-size:13.5px; font-weight:700; }
+  .av.a0 { background:#CDEFEA; } .av.a1 { background:#FFD9CC; } .av.a2 { background:#D3E6FF; }
+  .av.a3 { background:#FFEBB0; } .av.a4 { background:#E0D9FF; }
+  .tag { display:inline-flex; align-items:center; background:var(--brand-soft); color:var(--brand-ink); border-radius:99px;
+    padding:5px 6px 5px 14px; margin:0 6px 6px 0; font-size:13.5px; font-weight:650; }
 
-  .status { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:var(--lime-soft);
-    border-radius:18px; margin:16px 0 8px; font-size:14px; font-weight:700; cursor:pointer; }
-  .status .arr { color:var(--sub); font-size:12.5px; font-weight:600; }
+  .status { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:var(--brand-soft);
+    color:var(--brand-ink); border-radius:16px; margin:16px 0 8px; font-size:14px; font-weight:650; cursor:pointer; }
+  .status .arr { font-size:12.5px; font-weight:600; opacity:.85; }
 
-  .bottombar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + env(safe-area-inset-bottom));
-    width:min(492px, calc(100% - 24px)); background:var(--surface); border-radius:26px; padding:6px; z-index:15;
-    box-shadow:0 12px 34px -10px rgba(20,20,70,.35); }
-  .bottombar .bb-in { display:flex; gap:4px; }
-  .bottombar button { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 0 7px;
-    border-radius:20px; font-size:11.5px; font-weight:700; color:var(--sub); }
-  .bottombar button .ic { font-size:19px; line-height:1.2; filter:grayscale(1); opacity:.7; }
-  .bottombar button.on { background:var(--brand); color:#fff; }
-  .bottombar button.on .ic { filter:none; opacity:1; }
+  .bottombar { position:fixed; left:0; right:0; bottom:0; background:var(--surface); z-index:15;
+    box-shadow:0 -1px 0 var(--line), 0 -12px 30px -18px rgba(18,38,58,.25); padding:6px 10px calc(6px + env(safe-area-inset-bottom)); }
+  .bottombar .bb-in { display:flex; max-width:520px; margin:0 auto; }
+  .bottombar button { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:4px 0;
+    border-radius:12px; font-size:10.5px; font-weight:550; color:var(--sub); }
+  .bottombar button .ic { display:flex; align-items:center; justify-content:center; padding:4px 16px; border-radius:99px; }
+  .bottombar button .ic svg { width:22px; height:22px; display:block; fill:none; stroke:currentColor; stroke-width:1.8;
+    stroke-linecap:round; stroke-linejoin:round; }
+  .bottombar button.on { color:var(--brand-ink); font-weight:700; }
+  .bottombar button.on .ic { background:var(--brand-soft); }
 
   .leader-row { display:flex; align-items:baseline; gap:6px; }
   .leader-row .lbl { white-space:nowrap; }
-  .leader-row .ld { flex:1; border-bottom:1.5px dotted var(--line); margin:0 2px 4px; min-width:12px; }
-  .leader-row .val { white-space:nowrap; font-weight:700; }
+  .leader-row .ld { flex:1; border-bottom:1.5px dotted var(--faint); margin:0 2px 4px; min-width:12px; opacity:.6; }
+  .leader-row .val { white-space:nowrap; font-weight:650; }
 
   .tl-head { display:flex; justify-content:space-between; align-items:center; margin:0 0 4px; gap:10px; }
-  .tl-head h2 { font-size:22px; }
+  .tl-head h2 { font-size:24px; font-weight:700; letter-spacing:-.025em; margin:0; }
 
-  .stop-add { font-size:12.5px; color:var(--brand); background:none; border:none; padding:8px 0 0; font-weight:700; }
-  .fab { position:fixed; bottom:calc(92px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%);
-    border-radius:99px; padding:14px 26px; font-size:15px; font-weight:800; white-space:nowrap; background:var(--lime);
-    color:#14141F; z-index:10; box-shadow:0 14px 30px -10px rgba(20,20,70,.5); }
+  .stop-add { font-size:12.5px; color:var(--brand-ink); background:none; border:none; padding:8px 0 0; font-weight:650; }
+  .fab { position:fixed; bottom:calc(84px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%);
+    border-radius:99px; padding:14px 24px; font-size:15px; font-weight:700; white-space:nowrap; background:var(--brand);
+    color:var(--on-brand); z-index:10; box-shadow:0 12px 28px -10px rgba(0,0,0,.4); }
   .fab:active { transform:translateX(-50%) scale(.97); }
 
   /* 旅行计划 */
-  .plan-day { display:flex; justify-content:space-between; align-items:center; margin:28px 0 2px; }
-  .plan-day b { font-size:22px; font-weight:800; letter-spacing:-.02em; }
-  .plan-day span { background:var(--lime); color:#14141F; border-radius:99px; padding:4px 12px; font-size:12px; font-weight:800; }
+  .plan-day { display:flex; justify-content:space-between; align-items:center; margin:30px 0 4px; }
+  .plan-day b { font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .plan-day span { background:var(--brand-soft); color:var(--brand-ink); border-radius:99px; padding:4px 12px; font-size:12px; font-weight:650; }
+  .plan-day a { color:var(--brand-ink); font-weight:700; text-decoration:none; }
   .plan-item { display:flex; gap:12px; background:var(--surface); border-radius:20px; padding:14px; margin-top:10px; box-shadow:var(--shadow); }
-  .plan-item.done { opacity:.62; }
+  .plan-item.done { opacity:.6; }
   .plan-item.done .pn { text-decoration:line-through; text-decoration-color:var(--faint); }
   .tick { flex:0 0 24px; width:24px; height:24px; border-radius:50%; border:2px solid var(--faint); padding:0; margin-top:2px;
     display:flex; align-items:center; justify-content:center; }
-  .tick.on { background:var(--lime); border-color:var(--lime); }
-  .tick.on::after { content:'✓'; color:#14141F; font-size:13px; font-weight:900; line-height:1; }
+  .tick.on { background:var(--brand); border-color:var(--brand); }
+  .tick.on::after { content:'✓'; color:var(--on-brand); font-size:13px; font-weight:800; line-height:1; }
   .pt-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-  .pt { background:var(--brand-soft); color:var(--brand); border-radius:99px; padding:2px 10px; font-size:12.5px; font-weight:800; }
+  .pt { background:var(--brand-soft); color:var(--brand-ink); border-radius:99px; padding:2px 10px; font-size:12.5px; font-weight:700; }
   .pt.none { background:var(--field); color:var(--sub); font-weight:600; }
-  .ptag { background:var(--field); border-radius:99px; padding:2px 10px; font-size:12px; font-weight:700; color:var(--sub); }
-  .ptag[data-k="景点"]::before { content:'📍 '; } .ptag[data-k="美食"]::before { content:'🍜 '; }
-  .ptag[data-k="住宿"]::before { content:'🛏 '; }  .ptag[data-k="交通"]::before { content:'🚆 '; }
-  .ptag[data-k="其他"]::before { content:'✨ '; }
-  .pn { font-size:18px; font-weight:800; margin-top:6px; letter-spacing:-.01em; }
+  .ptag { background:var(--field); border-radius:99px; padding:2px 10px; font-size:12px; font-weight:600; color:var(--sub); }
+  .pn { font-size:18px; font-weight:700; margin-top:6px; letter-spacing:-.01em; }
   .pm { font-size:13px; color:var(--sub); margin-top:4px; line-height:1.6; }
-  .plan-item a { font-size:12.5px; font-weight:700; color:var(--brand); text-decoration:none; }
-  .ph-grid { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .plan-item a { font-size:12.5px; font-weight:650; color:var(--brand-ink); text-decoration:none; }
+  .ph-grid { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
   .ph { width:84px; height:84px; border-radius:14px; object-fit:cover; background:var(--field); cursor:pointer; display:block; }
   button.ph.add { border:2px dashed var(--faint); color:var(--sub); font-size:24px; font-weight:400; padding:0; }
-  .todo { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); }
-  .todo label { display:flex; align-items:center; gap:10px; margin:0; font-size:14.5px; color:var(--ink); font-weight:600; flex:1; }
+  .sort-item { display:flex; align-items:center; gap:10px; background:var(--surface); border-radius:16px; padding:10px 12px;
+    margin-top:8px; box-shadow:var(--shadow); cursor:grab; }
+  .sort-item .grip { color:var(--faint); font-size:16px; letter-spacing:-3px; user-select:none; }
+  .sort-item .sn { flex:1; min-width:0; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mv { padding:7px 11px; background:var(--field); border-radius:10px; font-size:13px; color:var(--ink); }
+  .mv:disabled { opacity:.3; cursor:default; }
+
+  /* 清单 */
+  .todo { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:var(--surface);
+    border-radius:16px; margin-top:8px; box-shadow:var(--shadow); }
+  .todo label { display:flex; align-items:center; gap:12px; margin:0; font-size:15px; color:var(--ink); font-weight:550; flex:1; }
   .todo input { width:auto; accent-color:var(--brand); }
-  .todo.done label { color:var(--sub); text-decoration:line-through; }
+  .todo.done label { color:var(--faint); text-decoration:line-through; }
+  .prog { height:8px; background:var(--surface); border-radius:99px; overflow:hidden; margin:14px 0 8px; }
+  .prog i { display:block; height:100%; background:var(--brand); border-radius:99px; }
 
   /* 流水 */
-  .exp-row { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; gap:10px;
-    background:var(--surface); border-radius:18px; margin-top:8px; }
+  .exp-row { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; gap:12px;
+    background:var(--surface); border-radius:18px; margin-top:8px; box-shadow:var(--shadow); }
   .exp-ic { flex:0 0 42px; width:42px; height:42px; border-radius:14px; background:var(--brand-soft); display:flex;
-    align-items:center; justify-content:center; font-size:20px; }
-  .exp-row .who { font-size:12px; color:var(--sub); margin-top:3px; }
+    align-items:center; justify-content:center; font-size:19px; }
   .exp-body { flex:1; min-width:0; }
   .exp-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-  .exp-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; padding-top:2px; }
+  .exp-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:650; padding-top:2px; }
   .exp-sub { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:2px; }
   .exp-sub .who { flex:1; min-width:0; margin-top:0; line-height:1.5; }
   .exp-actions { flex:0 0 auto; display:flex; margin-right:-6px; }
   .exp-actions .icon-btn { padding:4px 7px; }
+  .exp-row .who { font-size:12px; color:var(--sub); margin-top:3px; }
   .amt-r { text-align:right; white-space:nowrap; flex:0 0 auto; }
-  .amt-r .main { font-weight:800; }
+  .amt-r .main { font-weight:700; }
   .amt-r .orig { font-size:11.5px; color:var(--sub); }
-  .date-h { font-size:13px; font-weight:800; color:var(--sub); margin:24px 4px 4px; }
+  .date-h { font-size:13px; font-weight:700; color:var(--sub); margin:26px 4px 2px; }
 
-  /* 换汇 */
-  .fx-card { background:var(--brand); color:#fff; box-shadow:0 14px 30px -14px rgba(79,70,255,.7); }
-  .fx-card .eb { color:#D6D4FF; }
-  .fx-card .s2-title { font-size:24px; color:#fff; }
-  .fx-card .ld { border-bottom-color:rgba(255,255,255,.35); }
-  .fx-card .muted { color:#D6D4FF; }
+  /* 钱包 */
+  .fx-card { background:var(--brand); color:var(--on-brand); box-shadow:0 14px 30px -16px rgba(0,0,0,.45); }
+  .fx-card .eb, .fx-card .muted { color:inherit; opacity:.75; }
+  .fx-card .s2-title { font-size:24px; color:inherit; }
+  .fx-card .ld { border-bottom-color:rgba(255,255,255,.4); }
+  .fx-card .ghost { color:inherit; }
+  .wallet-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .wallet { background:var(--surface); border-radius:20px; padding:14px 16px; box-shadow:var(--shadow); }
+  .w-name { font-size:12.5px; font-weight:650; color:var(--sub); }
+  .w-amt { font-size:21px; font-weight:700; letter-spacing:-.02em; margin-top:6px; }
+  .w-amt.neg { color:var(--neg-ink); }
+  .fund-card { background:var(--brand-soft); box-shadow:none; }
+  .fund-card .eb { display:flex; align-items:center; gap:4px; }
+  .fund-bar { height:8px; background:var(--surface); border-radius:99px; overflow:hidden; margin:14px 0; }
+  .fund-bar i { display:block; height:100%; background:var(--brand); border-radius:99px; min-width:0; }
 
   /* 对账 */
-  .s2-title { font-size:26px; font-weight:800; margin-top:4px; letter-spacing:-.02em; }
+  .s2-title { font-size:26px; font-weight:700; margin-top:4px; letter-spacing:-.025em; }
   .s2-sub { font-size:13.5px; color:var(--sub); margin:8px 0 8px; font-weight:500; }
   .balance-row { padding:13px 16px; background:var(--surface); border-radius:16px; margin-top:8px; }
-  .balance-row .val { padding:2px 12px; border-radius:99px; background:var(--field); }
-  .balance-row .val.pos { background:var(--lime-soft); color:var(--pos-ink); }
-  .balance-row .val.neg { background:var(--pink-soft); color:var(--neg-ink); }
+  .balance-row .val.pos { color:var(--pos-ink); }
+  .balance-row .val.neg { color:var(--neg-ink); }
   .transfer { padding:18px; background:var(--surface); border-radius:22px; margin-top:12px; box-shadow:var(--shadow); }
-  .transfer .route { display:flex; align-items:baseline; gap:9px; font-size:17px; font-weight:800; }
-  .transfer .route .arrow { color:var(--faint); font-weight:700; font-size:15px; }
-  .transfer .t-amt { margin-left:auto; font-size:22px; font-weight:800; color:var(--brand); letter-spacing:-.02em; }
+  .transfer .route { display:flex; align-items:baseline; gap:9px; font-size:17px; font-weight:700; }
+  .transfer .route .arrow { color:var(--faint); font-weight:600; font-size:15px; }
+  .transfer .t-amt { margin-left:auto; font-size:22px; font-weight:700; color:var(--brand-ink); letter-spacing:-.02em; }
   .transfer .t-row { display:flex; align-items:baseline; }
   .t-detail { margin-top:10px; }
   .t-detail summary { font-size:12.5px; color:var(--sub); cursor:pointer; list-style:none; font-weight:600; }
   .t-detail summary::-webkit-details-marker { display:none; }
   .detail-line { font-size:12.5px; color:var(--sub); margin-top:8px; line-height:1.9; }
   .t-actions { margin-top:12px; }
-  .stamp { display:inline-block; font-size:12px; font-weight:800; color:#14141F; background:var(--lime); border-radius:99px; padding:4px 12px; }
+  .stamp { display:inline-block; font-size:12px; font-weight:700; color:var(--pos-ink); background:var(--surface); border-radius:99px; padding:4px 12px; }
 
   .stat { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:13px; }
   .stat .sl { flex:0 0 78px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--sub); font-weight:600; }
@@ -199,57 +223,54 @@
   .stat .sv2 { flex:0 0 auto; font-size:12.5px; font-weight:700; white-space:nowrap; }
 
   details.section { margin-bottom:6px; }
-  details.section > summary { font-size:14px; font-weight:800; cursor:pointer; list-style:none; padding:14px 16px;
-    background:var(--surface); border-radius:16px; display:flex; justify-content:space-between; }
-  .surface details.section > summary { background:var(--field); }
+  details.section > summary { font-size:14px; font-weight:700; cursor:pointer; list-style:none; padding:14px 16px;
+    background:var(--surface); border-radius:16px; display:flex; justify-content:space-between; box-shadow:var(--shadow); }
+  .surface details.section > summary { background:var(--field); box-shadow:none; }
   details.section > summary::-webkit-details-marker { display:none; }
-  details.section > summary::after { content:'＋'; color:var(--brand); font-weight:700; margin-left:10px; }
+  details.section > summary::after { content:'＋'; color:var(--brand-ink); font-weight:600; margin-left:10px; }
   details.section[open] > summary::after { content:'－'; }
   details.section > div { padding:12px 4px 6px; }
 
-  /* 浮层 / 回忆卡 */
-  .overlay { position:fixed; inset:0; background:rgba(14,14,30,.82); z-index:20; overflow-y:auto; display:flex; flex-direction:column;
+  /* 外观切换 */
+  .swatches { display:flex; flex-wrap:wrap; gap:10px; }
+  .sw { display:flex; align-items:center; gap:8px; background:var(--surface); border:2px solid var(--line); border-radius:99px;
+    padding:8px 16px 8px 10px; font-size:13.5px; font-weight:650; }
+  .sw i { width:18px; height:18px; border-radius:50%; background:var(--c); display:block; }
+  .sw.on { border-color:var(--brand); }
+
+  /* 浮层 / 回忆卡(分享图,保持醒目) */
+  .overlay { position:fixed; inset:0; background:rgba(14,19,23,.84); z-index:20; overflow-y:auto; display:flex; flex-direction:column;
     align-items:center; justify-content:center; gap:18px; padding:16px; }
   .overlay canvas { display:none; }
-  .recap-card { width:min(320px,92vw); background:var(--brand); border-radius:28px; overflow:hidden; padding:28px 26px 24px; color:#fff;
+  .overlay .cta { width:auto; background:#fff; color:#12263A; white-space:nowrap; padding:13px 22px; }
+  .overlay .outline { background:rgba(255,255,255,.16); border:none; color:#fff; white-space:nowrap; }
+  .recap-card { width:min(320px,92vw); background:#4F46FF; border-radius:28px; overflow:hidden; padding:28px 26px 24px; color:#fff;
     box-shadow:0 30px 70px -20px rgba(0,0,0,.7); }
-  .recap-title { font-size:26px; font-weight:800; letter-spacing:-.02em; color:#fff; }
+  .recap-title { font-size:26px; font-weight:700; letter-spacing:-.02em; color:#fff; }
   .recap-sub { font-size:12.5px; font-weight:600; color:#D6D4FF; margin-top:6px; }
   .recap-rule { height:2px; background:var(--lime); margin:20px 0; border-radius:2px; }
   .recap-stats { display:flex; justify-content:space-between; }
   .stat-box { text-align:center; }
-  .stat-num { font-size:28px; font-weight:800; }
+  .stat-num { font-size:28px; font-weight:700; }
   .stat-lb { font-size:12px; color:#D6D4FF; margin-top:3px; font-weight:600; }
   .recap-total { text-align:center; font-size:13px; color:#D6D4FF; margin-top:20px; font-weight:600; }
-  .recap-total b { color:var(--lime); font-size:26px; font-weight:800; display:block; margin-top:4px; }
+  .recap-total b { color:var(--lime); font-size:26px; font-weight:700; display:block; margin-top:4px; }
   .recap-facts { margin-top:20px; display:flex; flex-direction:column; gap:12px; }
   .recap-fact { font-size:13px; color:#fff; padding-left:12px; border-left:3px solid var(--lime); line-height:1.6; font-weight:600; }
-  .recap-stamp { margin-top:20px; text-align:right; font-size:12px; font-weight:800; color:var(--lime); }
-  .overlay .cta { width:auto; background:var(--lime); color:#14141F; white-space:nowrap; padding:13px 22px; }
-  .overlay .outline { background:rgba(255,255,255,.16); border:none; color:#fff; white-space:nowrap; }
+  .recap-stamp { margin-top:20px; text-align:right; font-size:12px; font-weight:700; color:var(--lime); }
   .lb-img { max-width:94vw; max-height:70vh; border-radius:16px; background:#000; }
-  .lb-cap { color:#E8E8F5; font-size:13px; font-weight:700; }
+  .lb-cap { color:#E8E8F5; font-size:13px; font-weight:600; }
 
   /* 行程列表 */
-  .hero { padding:6px 0 22px; }
+  .hero { padding:6px 0 18px; }
   .hero h1 { font-size:36px; }
   .hero p { margin-top:8px; }
-  .trip-row { padding:18px; border-radius:24px; margin-bottom:12px; cursor:pointer; }
-  .trip-row.c0 { background:var(--brand-soft); } .trip-row.c1 { background:var(--lime-soft); } .trip-row.c2 { background:var(--pink-soft); }
-  .trip-row.c3 { background:var(--sun-soft); }  .trip-row.c4 { background:var(--sky-soft); }
-  .trip-row .t-name { font-size:20px; font-weight:800; letter-spacing:-.01em; }
-  .trip-row .t-total { display:block; font-size:28px; font-weight:800; letter-spacing:-.02em; margin-top:10px; }
-  .trip-row .t-meta { font-size:12.5px; color:var(--sub); margin-top:6px; font-weight:600; }
+  .trip-row { padding:18px; background:var(--surface); border-radius:22px; margin-bottom:12px; cursor:pointer; box-shadow:var(--shadow);
+    border-left:5px solid var(--brand); }
+  .trip-row .t-name { font-size:19px; font-weight:700; letter-spacing:-.01em; }
+  .trip-row .t-total { display:block; font-size:27px; font-weight:700; letter-spacing:-.025em; margin-top:8px; }
+  .trip-row .t-meta { font-size:12.5px; color:var(--sub); margin-top:6px; font-weight:500; }
 
-  .wallet-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
-  .wallet { background:var(--surface); border-radius:20px; padding:14px 16px; box-shadow:var(--shadow); }
-  .w-name { font-size:13px; font-weight:800; color:var(--sub); }
-  .w-amt { font-size:21px; font-weight:800; letter-spacing:-.02em; margin-top:6px; }
-  .w-amt.neg { color:var(--neg-ink); }
-  .fund-card { background:var(--lime-soft); }
-  .fund-card .eb { display:flex; align-items:center; gap:4px; }
-  .fund-bar { height:10px; background:var(--surface); border-radius:99px; overflow:hidden; margin:14px 0; }
-  .fund-bar i { display:block; height:100%; background:var(--brand); border-radius:99px; min-width:0; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
   @media print {
     body { background:#fff; color:#000; }
@@ -267,6 +288,13 @@
 'use strict';
 const LS = 'travel-split-v1';
 let db = JSON.parse(localStorage.getItem(LS) || '{"trips":[]}');
+const THEMES = [{ id:'sea', name:'海风', c:'#0B7F76' }, { id:'indigo', name:'靛蓝', c:'#4F46E5' }, { id:'peach', name:'蜜桃', c:'#CF4128' }, { id:'ink', name:'石墨', c:'#111114' }];
+try { const th = localStorage.getItem('ts-theme'); if (th && document.documentElement) document.documentElement.dataset.theme = th; } catch {}
+function setTheme(id) {
+  if (document.documentElement) document.documentElement.dataset.theme = id;
+  try { localStorage.setItem('ts-theme', id); } catch {}
+  render();
+}
 function migratePayers(db) {
   db.trips.forEach(t => t.expenses.forEach(e => {
     if (!e.payers && e.payerId) { e.payers = { [e.payerId]: e.mainCents }; delete e.payerId; }
@@ -671,6 +699,19 @@ function repriceExpense(e, rate) {
   const ad = x => (x.r.find(y => y.from === 'A' && y.to === 'D') || {}).cents;
   console.assert(q1.r.every(x => x.cents > 0) && ['A','D','E'].every(k => q1.nb[k] === q1.bd[k] && q2.nb[k] === q2.bd[k]) && ad(q1) === 120700 && ad(q2) === 20700,
     '逐笔结算算错', q1, q2);
+  // 计划手动排序:没排过按时间(全天最前);排过的按 ord,新加的排最后
+  const so = o => sortedStops({ stops: o }).map(x => x.name).join('');
+  const base = [{ date:'d', name:'a', time:'10:00' }, { date:'d', name:'b', time:'09:00' }, { date:'d', name:'c', time:'' }, { date:'e', name:'z', time:'08:00' }];
+  console.assert(so(base) === 'cbaz', '默认按时间排序算错', so(base));
+  const man = [{ date:'d', name:'a', time:'10:00', ord:1 }, { date:'d', name:'b', time:'09:00', ord:3 }, { date:'d', name:'c', time:'', ord:2 }, { date:'d', name:'n', time:'07:00' }];
+  console.assert(so(man) === 'acbn', '手动排序算错', so(man));
+  // 地图位置:自己指定的优先;链接原样打开;经纬度/地址走搜索;不是 http 的不当链接
+  console.assert(mapHref({ name:'清水寺' }).endsWith(encodeURIComponent('清水寺'))
+    && mapHref({ name:'x', loc:'https://maps.app.goo.gl/abc' }) === 'https://maps.app.goo.gl/abc'
+    && mapHref({ name:'x', loc:'3.139, 101.6869' }).endsWith(encodeURIComponent('3.139,101.6869'))
+    && mapHref({ name:'x', loc:'javascript:alert(1)' }).startsWith('https://www.google.com/maps/search/'), '地图位置算错');
+  const rt2 = dayRouteHref([{ name:'A', loc:'3.1,101.6' }, { name:'B' }, { name:'C', loc:'https://maps.app.goo.gl/z' }]);
+  console.assert(rt2.includes('origin=3.1%2C101.6') && rt2.includes('destination=C') && rt2.includes('waypoints=B') && dayRouteHref([{ name:'A' }]) === '', '当天路线算错', rt2);
   // 清单作为独立记录同步
   const rt = tripToRecords({ id:'T', name:'n', currency:'MYR', members:[], expenses:[], stops:[], settlements:[], todos:[{id:'d1', text:'护照', done:false}] });
   console.assert(rt.length === 2 && rt[1].kind === 'todo' && applyRemote({ todos:[] }, { id:'d1', kind:'todo', data:{id:'d1', text:'x'} }), '清单同步算错', rt);
@@ -1041,7 +1082,12 @@ function addStop(ev) {
   const t = trip(); t.stops = t.stops || [];
   const i = t.stops.findIndex(s => s.id === view.editStopId);
   const rec = { ...(i >= 0 ? t.stops[i] : {}), id: view.editStopId || uid(), name, date: f.sdate.value, time: f.stime.value,
-    note: f.snote.value.trim(), kind: f.skind.value };
+    note: f.snote.value.trim(), kind: f.skind.value, ...(f.sloc ? { loc: f.sloc.value.trim() } : {}) };
+  if (i < 0 || t.stops[i].date !== rec.date) {
+    delete rec.ord;
+    const used = t.stops.filter(x => x.date === rec.date && x.id !== rec.id && x.ord != null).map(x => x.ord);
+    if (used.length) rec.ord = Math.max(...used) + 1;
+  }
   if (i >= 0) t.stops[i] = rec; else t.stops.push(rec);
   view.showStopForm = false; view.editStopId = ''; save(); render();
 }
@@ -1201,12 +1247,21 @@ function render() {
   hydratePhotos();
 }
 function goScreen(s) { view = { screen:s }; render(); }
+const NAV_ICON = {
+  plan:   '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  todo:   '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.2 12.4l2.6 2.6 5-5.3"/></svg>',
+  ledger: '<svg viewBox="0 0 24 24"><path d="M5.5 3.5h13v17l-2.2-1.5-2.2 1.5-2.1-1.5-2.1 1.5-2.2-1.5-2.2 1.5z"/><path d="M9 9h6M9 12.5h6"/></svg>',
+  fx:     '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3.5"/><path d="M3 10.5h18"/><circle cx="16.8" cy="14.8" r=".9"/></svg>',
+  settle: '<svg viewBox="0 0 24 24"><path d="M6 8h12l-3-3M18 16H6l3 3"/></svg>',
+  list:   '<svg viewBox="0 0 24 24"><rect x="3.5" y="8" width="17" height="11.5" rx="3"/><path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8"/></svg>',
+  backup: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>',
+};
 function bottomBar() {
   const items = view.screen === 'trip'
-    ? [['plan','🗓','计划'],['ledger','🧾','流水'],['fx','👛','钱包'],['settle','🤝','对账']].map(([k, ic, l]) =>
-        `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')"><span class="ic">${ic}</span>${l}</button>`)
-    : [['list','🧳','行程'],['backup','💾','备份']].map(([k, ic, l]) =>
-        `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')"><span class="ic">${ic}</span>${l}</button>`);
+    ? [['plan','计划'],['todo','清单'],['ledger','流水'],['fx','钱包'],['settle','对账']].map(([k, l]) =>
+        `<button class="${view.tab === k ? 'on' : ''}" onclick="setTab('${k}')"><span class="ic">${NAV_ICON[k]}</span>${l}</button>`)
+    : [['list','行程'],['backup','备份']].map(([k, l]) =>
+        `<button class="${view.screen === k ? 'on' : ''}" onclick="goScreen('${k}')"><span class="ic">${NAV_ICON[k]}</span>${l}</button>`);
   return `<nav class="bottombar"><div class="bb-in">${items.join('')}</div></nav>`;
 }
 function renderBackup() {
@@ -1214,14 +1269,16 @@ function renderBackup() {
   const warn = days === null ? '还没备份过，建议现在导出一份。' : days > 7 ? `上次备份是 ${days} 天前，建议现在导出一份。` : '';
   return `
   <div class="hero">
-    <div class="eb">Backup</div>
     <h1>备份</h1>
     ${warn ? `<p class="muted" style="color:var(--clay)">${warn}</p>` : ''}
     <p class="muted">账本只存在这台设备的浏览器里，清缓存会丢。定期导出 JSON 存好，或把文件发给同行的人，对方导入即可各留一份。照片也会一起备份，照片多时文件会比较大；照片目前只存在添加它的那台手机里，换手机前务必先导出。</p>
   </div>
   <button class="cta" onclick="exportData()">导出备份</button>
   <button class="outline" style="width:100%;margin-top:12px" onclick="document.getElementById('imp').click()">导入备份</button>
-  <input id="imp" type="file" accept=".json,application/json" style="display:none" onchange="importData(event)">`;
+  <input id="imp" type="file" accept=".json,application/json" style="display:none" onchange="importData(event)">
+  <h2 style="margin-top:36px">外观</h2>
+  <p class="muted" style="margin-bottom:12px">选一个喜欢的主题色，只影响这台设备。深色模式会跟随手机系统。</p>
+  <div class="swatches">${THEMES.map(x => `<button class="sw ${((document.documentElement && document.documentElement.dataset.theme) || 'sea') === x.id ? 'on' : ''}" style="--c:${x.c}" onclick="setTheme('${x.id}')"><i></i>${x.name}</button>`).join('')}</div>`;
 }
 function lr(lbl, val, cls) {
   return `<div class="leader-row"><span class="lbl">${lbl}</span><span class="ld"></span><span class="val ${cls||''}">${val}</span></div>`;
@@ -1230,7 +1287,7 @@ function lr(lbl, val, cls) {
 function renderList() {
   return `
   <div class="hero">
-    <h1>旅行分账 ✈️</h1>
+    <h1>旅行分账</h1>
     <p class="muted">出发、记账，到家前就结清。</p>
   </div>
   ${db.trips.map((t, i) => `
@@ -1267,13 +1324,14 @@ function statusChip(t) {
 }
 function renderTrip() {
   const t = trip();
-  const body = ({ plan:renderPlan, ledger:renderLedger, fx:renderFx, settle:renderSettle })[view.tab](t);
+  const body = ({ plan:renderPlan, todo:renderTodos, ledger:renderLedger, fx:renderFx, settle:renderSettle })[view.tab](t);
   return `
   <button class="icon-btn" style="padding-left:0;margin-bottom:6px" onclick="goScreen('list')">← 所有行程</button>
   <div class="topbar">
     <div><h1>${esc(t.name)}</h1><div class="trip-date">${dateRange(t)}${t.members.length} 人同行 · ${t.currency} 结算${syncBadge(t)}</div></div>
     <div class="avatars">${t.members.map((m, i) => `<span class="av a${i % 5}">${esc(m.name.slice(0,1).toUpperCase())}</span>`).join('')}</div>
   </div>
+  ${view.tab === 'plan' ? `
   <details class="section" ${t.members.length ? '' : 'open'} style="margin-top:14px">
     <summary>成员 · ${t.members.length}</summary>
     <div>${t.members.map(m => `<span class="tag">${esc(m.name)}
@@ -1285,9 +1343,10 @@ function renderTrip() {
     <button class="ghost" onclick="shareTrip()" style="margin-top:8px">${t.shareCode ? '邀请链接' : '邀请同伴 · 开启多人同步'}</button></div>
   </details>
   ${statusChip(t)}
+  ` : (t.members.length ? '' : `<p class="muted" style="margin-top:14px">还没有成员。<button class="ghost" onclick="setTab('plan')">先去添加</button></p>`)}
   ${view.showForm ? expenseForm(t) : ''}
   ${body}
-  ${t.members.length && view.tab !== 'fx' ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
+  ${t.members.length && !['fx', 'todo'].includes(view.tab) ? `<button class="fab" onclick="toggleForm()">${view.showForm ? '收起表单 ✕' : '＋ 记一笔'}</button>` : ''}
   ${view.showRecap ? recapOverlay() : ''}
   ${view.showInvite ? inviteOverlay(t) : ''}
   ${view.showClaim ? claimOverlay(t) : ''}
@@ -1321,7 +1380,7 @@ function claimOverlay(t) {
 }
 
 function renderPlan(t) {
-  const stops = [...(t.stops || [])].sort((a, b) => ((a.date || '') + ' ' + (a.time || '')).localeCompare((b.date || '') + ' ' + (b.time || '')));
+  const stops = sortedStops(t);
   const today = new Date().toISOString().slice(0, 10);
   const first = stops.length ? stops[0].date : '';
   const WD = ['日','一','二','三','四','五','六'];
@@ -1334,8 +1393,9 @@ function renderPlan(t) {
   return `
   <div class="tl-head">
     <div><h2 style="margin:0">旅行计划</h2>${status ? `<div class="trip-date">${status}</div>` : ''}</div>
-    <div>${stops.length ? '<button class="ghost" onclick="window.print()">打印</button> ' : ''}<button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加行程'}</button></div>
+    <div>${stops.length > 1 ? `<button class="ghost" onclick="toggleSortMode()">${view.sortMode ? '完成' : '排序'}</button>` : ''}${stops.length && !view.sortMode ? '<button class="ghost" onclick="window.print()">打印</button>' : ''}${view.sortMode ? '' : `<button class="ghost" onclick="toggleStopForm()">${view.showStopForm ? '收起' : '＋ 加行程'}</button>`}</div>
   </div>
+  ${view.sortMode ? '<p class="muted" style="margin-top:8px">拖动整行，或点 ▲▼，调整当天的先后顺序。点「完成」退出。</p>' : ''}
   ${view.showStopForm ? `
   <form class="surface" id="stop-form" onsubmit="addStop(event)" style="margin-top:12px">
     <div class="eb">${es ? '修改行程' : '什么时间去哪里'}</div>
@@ -1344,8 +1404,14 @@ function renderPlan(t) {
       <div><label>时间(可选)</label><input name="stime" type="time" value="${es ? es.time || '' : ''}"></div>
     </div>
     <label>去哪里</label><input name="sname" placeholder="如 清水寺" value="${es ? esc(es.name) : ''}" required autofocus>
+    <label>地图位置(可选，不填就按名字搜)</label>
+    <div class="row">
+      <input name="sloc" placeholder="粘贴地图链接，或填地址 / 经纬度" value="${es ? esc(es.loc || '') : ''}">
+      <button type="button" class="outline" style="flex:0 0 auto" onclick="useMyLocation(this.form)">用现在位置</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:6px">在 Google 地图里点「分享」→「复制链接」，粘贴到这里，打开地图时就会精确定位到你选的那个点。</p>
     <label>类型</label>
-    <div class="checks">${KINDS.map(k => `<label><input type="radio" name="skind" value="${k}" ${k === kind0 ? 'checked' : ''}>${KICON[k]} ${k}</label>`).join('')}</div>
+    <div class="checks">${KINDS.map(k => `<label><input type="radio" name="skind" value="${k}" ${k === kind0 ? 'checked' : ''}>${k}</label>`).join('')}</div>
     <label>备注(可选)</label><input name="snote" placeholder="订位号、交通、要带什么…" value="${es ? esc(es.note || '') : ''}">
     <button class="cta" style="margin-top:16px">${es ? '保存修改' : '加入计划'}</button>
     ${es ? '' : '<p class="muted" style="font-size:12px;margin-top:10px">加入后，在这一条下面点「＋ 照片」就能放照片。</p>'}
@@ -1354,8 +1420,10 @@ function renderPlan(t) {
     const n = Math.round((new Date(g.date) - new Date(first)) / 864e5) + 1;
     const wd = WD[new Date(g.date + 'T00:00').getDay()];
     const dn = g.items.filter(x => x.done).length;
-    return `<div class="plan-day"><b>${+g.date.slice(5,7)}/${+g.date.slice(8,10)} 周${wd}${g.date === today ? ' · 今天' : ''}</b><span>Day ${n}${dn ? ` · ${dn}/${g.items.length}` : ''}</span></div>
-    ${g.items.map(s => {
+    const route = dayRouteHref(g.items);
+    return `<div class="plan-day"><b>${+g.date.slice(5,7)}/${+g.date.slice(8,10)} 周${wd}${g.date === today ? ' · 今天' : ''}</b><span>Day ${n}${dn ? ` · ${dn}/${g.items.length}` : ''}${route && !view.sortMode ? ` · <a href="${esc(route)}" target="_blank" rel="noopener">路线</a>` : ''}</span></div>
+    ${g.items.map((s, k) => {
+      if (view.sortMode) return sortRow(s, k, g.items.length);
       const spent = t.expenses.filter(e => e.stopId === s.id).reduce((x, e) => x + e.mainCents, 0);
       const ph = s.photos || [];
       return `<div class="plan-item ${s.done ? 'done' : ''}">
@@ -1365,25 +1433,98 @@ function renderPlan(t) {
           <div class="pn">${esc(s.name)}</div>
           ${s.note ? `<div class="pm">${esc(s.note)}</div>` : ''}
           ${spent ? `<div class="pm">已花 ${t.currency} ${fmt(spent)}</div>` : ''}
-          <div class="pm"><a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(s.name)}" target="_blank" rel="noopener">在地图中打开</a></div>
+          <div class="pm"><a href="${esc(mapHref(s))}" target="_blank" rel="noopener">在地图中打开</a>${s.loc ? ' <span class="muted" style="font-size:12px">· 已指定位置</span>' : ''}</div>
           ${ph.length ? `<div class="ph-grid">${ph.map(pid => `<img class="ph" data-pid="${pid}" alt="" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onclick="openPhoto('${s.id}','${pid}')">`).join('')}${ph.length < PHOTO_MAX ? `<button class="ph add" onclick="pickPhotos('${s.id}')" aria-label="加照片">＋</button>` : ''}</div>`
             : `<button class="stop-add" onclick="pickPhotos('${s.id}')">＋ 照片</button>`}
         </div>
         <button class="icon-btn" onclick="openEditStop('${s.id}')">改</button>
         <button class="icon-btn" onclick="delStop('${s.id}')">×</button>
       </div>`; }).join('')}`;
-  }).join('') || '<p class="muted" style="margin-top:14px">还没有计划。把什么时间去哪里排进来，出发前后都能随时调整，每一条下面还能放照片。</p>'}
-  <details class="section" ${view.todoOpen ? 'open' : ''} ontoggle="view.todoOpen = this.open" style="margin-top:30px">
-    <summary>清单 · ${tdone}/${todos.length}</summary>
-    <div>
-      ${todos.map(x => `<div class="todo ${x.done ? 'done' : ''}"><label><input type="checkbox" ${x.done ? 'checked' : ''} onchange="toggleTodo('${x.id}')">${esc(x.text)}</label><button class="icon-btn" onclick="delTodo('${x.id}')">×</button></div>`).join('')}
-      <form class="row" onsubmit="addTodo(event)" style="margin-top:12px">
-        <input name="ttext" placeholder="打包、订票、待办…">
-        <button class="outline" style="flex:0 0 auto">添加</button>
-      </form>
-      ${todos.length ? '' : '<button class="ghost" style="margin-top:8px" onclick="seedTodos()">套用常用物品清单</button>'}
-    </div>
-  </details>`;
+  }).join('') || '<p class="muted" style="margin-top:14px">还没有计划。把什么时间去哪里排进来，出发前后都能随时调整，每一条下面还能放照片。</p>'}`;
+}
+// 地图位置:自己指定的点优先(Google 地图链接 / 经纬度 / 地址);没填就按名字搜
+function mapHref(s) {
+  const q = (s.loc || '').trim();
+  const g = v => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(v);
+  if (!q) return g(s.name);
+  if (/^https?:\/\//i.test(q)) return q;
+  const m = q.match(/^(-?\d+(?:\.\d+)?)\s*[,，]\s*(-?\d+(?:\.\d+)?)$/);
+  return m ? g(`${m[1]},${m[2]}`) : g(q);
+}
+function placeQuery(s) { const q = (s.loc || '').trim(); return q && !/^https?:\/\//i.test(q) ? q : s.name; }
+// 当天路线:按你排好的顺序,在 Google 地图里一次连起来(起点 + 最多 9 个途经点 + 终点)
+function dayRouteHref(items) {
+  if (items.length < 2) return '';
+  const q = items.slice(0, 11).map(placeQuery);
+  const p = new URLSearchParams({ api: '1', origin: q[0], destination: q[q.length - 1] });
+  if (q.length > 2) p.set('waypoints', q.slice(1, -1).join('|'));
+  return 'https://www.google.com/maps/dir/?' + p.toString();
+}
+function useMyLocation(f) {
+  if (!navigator.geolocation) { alert('这个浏览器不支持定位'); return; }
+  navigator.geolocation.getCurrentPosition(
+    p => { f.sloc.value = `${p.coords.latitude.toFixed(6)},${p.coords.longitude.toFixed(6)}`; },
+    () => alert('没能获取位置。请在手机设置里允许浏览器使用定位，或者直接粘贴地图链接。'),
+    { enableHighAccuracy: true, timeout: 10000 });
+}
+// 同一天内的顺序:手动排过的按 ord;没排过的按时间(全天排最前)
+function sortedStops(t) {
+  return [...(t.stops || [])].sort((a, b) => (a.date || '').localeCompare(b.date || '')
+    || ((a.ord ?? 1e9) - (b.ord ?? 1e9)) || (a.time || '').localeCompare(b.time || '') || a.name.localeCompare(b.name));
+}
+const dayItems = (t, date) => sortedStops(t).filter(s => s.date === date);
+const setDayOrder = list => list.forEach((s, i) => { s.ord = i + 1; });
+function toggleSortMode() { view.sortMode = !view.sortMode; view.showStopForm = false; render(); }
+function moveStop(id, d) {
+  const t = trip(), s = (t.stops || []).find(x => x.id === id);
+  if (!s) return;
+  const list = dayItems(t, s.date), i = list.findIndex(x => x.id === id), j = i + d;
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  setDayOrder(list); save(); keepScroll(render);
+}
+function dragStart(ev, id) {
+  view.dragId = id;
+  if (ev.dataTransfer) { ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed = 'move'; }
+}
+function dropOn(ev, targetId) {
+  ev.preventDefault();
+  const t = trip(), a = (t.stops || []).find(x => x.id === view.dragId), b = (t.stops || []).find(x => x.id === targetId);
+  if (!a || !b || a.id === b.id || a.date !== b.date) return;
+  const list = dayItems(t, a.date), i = list.findIndex(x => x.id === a.id), j = list.findIndex(x => x.id === b.id);
+  list.splice(i, 1); list.splice(j, 0, a);
+  setDayOrder(list); view.dragId = ''; save(); keepScroll(render);
+}
+function sortRow(s, k, n) {
+  return `<div class="sort-item" draggable="true" ondragstart="dragStart(event,'${s.id}')" ondragover="event.preventDefault()" ondrop="dropOn(event,'${s.id}')">
+    <span class="grip">⋮⋮</span>
+    <span class="pt num ${s.time ? '' : 'none'}">${s.time || '全天'}</span>
+    <span class="sn">${esc(s.name)}</span>
+    <button class="mv" ${k === 0 ? 'disabled' : ''} onclick="moveStop('${s.id}',-1)" aria-label="上移">▲</button>
+    <button class="mv" ${k === n - 1 ? 'disabled' : ''} onclick="moveStop('${s.id}',1)" aria-label="下移">▼</button>
+  </div>`;
+}
+
+// ================= 清单页 =================
+function clearDoneTodos() {
+  if (!confirm('清掉所有已完成的项目？')) return;
+  const t = trip(); t.todos = (t.todos || []).filter(x => !x.done); save(); render();
+}
+function renderTodos(t) {
+  const todos = t.todos || [], done = todos.filter(x => x.done).length;
+  const ordered = [...todos.filter(x => !x.done), ...todos.filter(x => x.done)];
+  return `
+  <div class="tl-head">
+    <div><h2 style="margin:0">清单</h2><div class="trip-date">${todos.length ? `已完成 ${done} / ${todos.length}` : '打包、订票、待办，都记在这里'}</div></div>
+    ${done ? '<button class="ghost" onclick="clearDoneTodos()">清掉已完成</button>' : ''}
+  </div>
+  ${todos.length ? `<div class="prog"><i style="width:${Math.round(done / todos.length * 100)}%"></i></div>` : ''}
+  <form class="row" onsubmit="addTodo(event)" style="margin-top:14px">
+    <input name="ttext" placeholder="加一项：护照、充电器、订酒店…" autofocus>
+    <button class="cta" style="width:auto;flex:0 0 auto">添加</button>
+  </form>
+  ${ordered.map(x => `<div class="todo ${x.done ? 'done' : ''}"><label><input type="checkbox" ${x.done ? 'checked' : ''} onchange="toggleTodo('${x.id}')">${esc(x.text)}</label><button class="icon-btn" onclick="delTodo('${x.id}')">×</button></div>`).join('')}
+  ${todos.length ? '' : '<p class="muted" style="margin-top:16px">还没有内容。可以一项项加，也可以一键套用常用的出行物品清单。</p><button class="outline" style="margin-top:8px" onclick="seedTodos()">套用常用物品清单</button>'}`;
 }
 function photoOverlay(t) {
   const s = (t.stops || []).find(x => x.id === view.photo.stopId);
@@ -1679,7 +1820,7 @@ function expenseForm(t) {
       <div style="margin-top:2px"><button type="button" class="icon-btn" style="color:var(--accent-ink);padding-left:0" onclick="refreshRate(this.form,true)">用我的换汇汇率</button><button type="button" class="icon-btn" onclick="fetchRate(this.form)">查今日汇率(仅参考)</button></div>
     </div>
     <label>类别</label>
-    <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${CATICON[c]} ${c}</label>`).join('')}</div>
+    <div class="checks">${CATS.map(c => `<label><input type="radio" name="cat" value="${c}" ${c === cat0 ? 'checked' : ''}>${c}</label>`).join('')}</div>
     ${t.fundHolder ? `<div class="checks" style="margin-top:14px"><label><input type="checkbox" name="fund" ${fund0 ? 'checked' : ''} onchange="fundToggle(this.form)">💰 从共同基金出 · 剩 ${esc(t.currency)} ${fmt(fundLeftCents(t))}</label></div>` : ''}
     <details class="section" ${isEdit ? 'open' : ''} style="margin-top:18px">
       <summary>更多选项${dflt}</summary>
